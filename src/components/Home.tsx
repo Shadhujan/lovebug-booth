@@ -1,8 +1,8 @@
 
-type Props = { onStart: () => void; onAlbum: () => void };
+type Props = { onStart: () => void; onAlbum: () => void; onTogether: () => void };
 const photoPaths = [1, 2, 3, 4].map(n => `/demo/photo-${n}.svg`);
 
-export default function Home({ onStart, onAlbum }: Props) {
+export default function Home({ onStart, onAlbum, onTogether }: Props) {
   return <main className="home-page">
     <div className="home-glow one" aria-hidden="true"/><div className="home-glow two" aria-hidden="true"/>
     <section className="hero-section page-width">
@@ -14,6 +14,7 @@ export default function Home({ onStart, onAlbum }: Props) {
           <button className="pink-button" onClick={onStart}>let's get silly <span className="button-icon">↗</span></button>
           <button className="soft-button" onClick={onAlbum}><span aria-hidden="true">♡</span> our little album</button>
         </div>
+        <button className="together-home-link" onClick={onTogether}>far away today? try Together Apart &#9825; <span>&#8599;</span></button>
         <div className="hand-note hero-hand-note">psst... you two look cute together! <span>↗</span></div>
       </div>
       <div className="hero-art" aria-label="Illustrated example Lovebug Booth photo strip">
@@ -40,7 +41,7 @@ export default function Home({ onStart, onAlbum }: Props) {
         <div><span>02</span> <strong>decorate our chaos</strong><small>stickers, doodles & love notes</small></div>
         <div><span>03</span> <strong>keep it forever</strong><small>download your masterpiece</small></div>
       </div>
-      <p className="small-note">No accounts needed to start. Just you, me, and a camera. ♡</p>
+      <p className="small-note">No account needed for photos or sticker editing. Just you, me, and a camera. ♡</p>
     </section>
   </main>;
 }

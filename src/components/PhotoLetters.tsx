@@ -1,0 +1,86 @@
+import { useRef, useState, type ChangeEvent } from 'react';
+import { compressPhoto } from '../lib/photos';
+import { completePhotoSet, composePhotoLetters, downloadPhotoLetter, readPhotoLetter, SCENES, type SceneKey } from '../lib/togetherPhotos';
+
+type Props = {
+  mine: (string | null)[];
+  partner: (string | null)[];
+  onMine: (photos: (string | null)[]) => void;
+  onPartner: (photos: (string | null)[]) => void;
+  onCamera: () => void;
+  onCombine: (photos: string[]) => void;
+};
+
+export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamera, onCombine }: Props) {
+  const minePicker = useRef<HTMLInputElement>(null);
+  const partnerPicker = useRef<HTMLInputElement>(null);
+  const partnerImagesPicker = useRef<HTMLInputElement>(null);
+  const [scene, setScene] = useState<SceneKey>('blush');
+  const [swap, setSwap] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const mineDone = completePhotoSet(mine);
+  const partnerDone = completePhotoSet(partner);
+
+  async function uploadMine(files: FileList | null) {
+    if (!files?.length) return;
+    if (files.length !== 4) { setError('Please choose exactly four photos.'); return; }
+    setBusy(true); setError('');
+    try { onMine(await Promise.all(Array.from(files).map(compressPhoto))); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import your photos.'); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadPartnerImages(files: FileList | null) {
+    if (!files?.length) return;
+    if (files.length !== 4) { setError('Please choose exactly four pictures from your partner.'); return; }
+    setBusy(true); setError('');
+    try { onPartner(await Promise.all(Array.from(files).map(compressPhoto))); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the pictures.'); }
+    finally { setBusy(false); }
+  }
+
+  async function importPartner(file: File | undefined) {
+    if (!file) return;
+    setBusy(true); setError('');
+    try { const letter = await readPhotoLetter(file); onPartner(letter.photos); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not read the photo letter.'); }
+    finally { setBusy(false); }
+  }
+
+  async function combine() {
+    setBusy(true); setError('');
+    try { onCombine(await composePhotoLetters(mine, partner, scene, swap)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not make your combined photos.'); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="together-letters" aria-label="Photo letters, the take-it-later fallback">
+    <div className="together-section-lead"><span className="eyebrow">NO PERFECT TIMING REQUIRED</span><h2>Photo letters <em>for two</em></h2><p>Take your pictures whenever you can. Send her a little photo letter privately, then combine the two sets into four side-by-side memories. No call or Supabase connection needed.</p></div>
+    <div className="letter-steps">
+      <article className="paper-card letter-card">
+        <div className="letter-step-number">01 / your little letter</div><h3>Take your four pictures</h3><p>Open your camera or choose four from your phone. Download a photo pack to send to her privately.</p>
+        <div className="letter-previews">{mine.map((item, index) => <div key={index}>{item ? <img src={item} alt={`Your picture ${index + 1}`} /> : <span>{index + 1}</span>}</div>)}</div>
+        <div className="letter-actions"><button className="pink-button" onClick={onCamera} disabled={busy}>open my camera <span className="button-icon">&#8599;</span></button><button className="soft-button" onClick={() => minePicker.current?.click()} disabled={busy}>upload four</button></div>
+        {mineDone && <button className="outline-button letter-download" disabled={busy} onClick={() => { try { downloadPhotoLetter(mine); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not export your photos.'); } }}>download my photo letter (.json) &#8595;</button>}
+      </article>
+      <article className="paper-card letter-card">
+        <div className="letter-step-number">02 / their little letter</div><h3>Open her photo letter</h3><p>Ask her to do the same, then send you her exported <code>.json</code> file by a private chat. Open it here.</p>
+        <div className="letter-previews">{partner.map((item, index) => <div key={index}>{item ? <img src={item} alt={`Partner picture ${index + 1}`} /> : <span>{index + 1}</span>}</div>)}</div>
+        <div className="letter-actions"><button className="soft-button letter-import" onClick={() => partnerPicker.current?.click()} disabled={busy}>choose their photo letter &#8593;</button><button className="outline-button letter-import" onClick={() => partnerImagesPicker.current?.click()} disabled={busy}>or upload their four photos</button></div>
+        {partnerDone && <p className="letter-success" role="status">Her four photos are here. Time for the magic.</p>}
+      </article>
+    </div>
+    <div className="paper-card letter-combine"><div><span className="eyebrow">03 / ONE SWEET PHOTO STRIP</span><h3>Bring your pictures together</h3><p>Choose a scrapbook frame color, then combine your four poses with her four poses. After that, use all the usual stickers and doodles.</p></div>
+      <div className="scene-options" role="group" aria-label="Choose common scrapbook background">{(Object.entries(SCENES) as [SceneKey, typeof SCENES[SceneKey]][]).map(([key, item]) => <button key={key} aria-pressed={scene === key} onClick={() => setScene(key)} className={scene === key ? 'active' : ''}><span className="scene-swatch" style={{ background: item.background }} /><span>{item.name}</span></button>)}</div>
+      <label className="letter-swap"><input type="checkbox" checked={swap} onChange={(event: ChangeEvent<HTMLInputElement>) => setSwap(event.target.checked)} /> Put her photos on the left</label>
+      <button className="pink-button letter-combine-button" disabled={busy || !mineDone || !partnerDone} onClick={() => void combine()}>{busy ? 'making your memory...' : 'combine our four pictures'} <span className="button-icon">&#9825;</span></button>
+      {!mineDone || !partnerDone ? <small>Both sets of four photos are required before combining.</small> : null}
+      {error && <p className="error-note" role="alert">{error}</p>}
+      <p className="together-help-note">Photo letters stay on your device unless you send them. This version places the two complete photos side by side; removing the original room backgrounds is a future feature.</p>
+    </div>
+    <input ref={minePicker} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { void uploadMine(event.target.files); event.target.value = ''; }} aria-label="Upload your four photos" />
+    <input ref={partnerImagesPicker} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { void uploadPartnerImages(event.target.files); event.target.value = ''; }} aria-label="Upload four pictures from your partner" />
+    <input ref={partnerPicker} className="visually-hidden" type="file" accept=".json,application/json" onChange={(event: ChangeEvent<HTMLInputElement>) => { void importPartner(event.target.files?.[0]); event.target.value = ''; }} aria-label="Import your partner's Lovebug photo letter" />
+  </section>;
+}

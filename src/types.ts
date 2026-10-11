@@ -1,5 +1,5 @@
 export type ThemeKey = 'strawberry' | 'peach' | 'lilac' | 'mint';
-export type Screen = 'home' | 'setup' | 'camera' | 'review' | 'editor' | 'finish' | 'album';
+export type Screen = 'home' | 'setup' | 'camera' | 'review' | 'editor' | 'finish' | 'album' | 'together';
 export type StickerItem = {
   id: string;
   kind: 'image' | 'text';

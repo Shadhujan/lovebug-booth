@@ -13,7 +13,18 @@ The UI concept is approved. Keep all work mobile-first and verify behavior on a 
 - [x] README and zero-secret configuration scaffold.
 - [ ] User-side: install dependencies, run `npm run typecheck`, `npm run build`, use a real phone over HTTPS.
 
-## Phase B - Shared private album with Supabase (next)
+## Phase B - Long-distance photo booth (v0.2)
+
+- [x] Together Apart mobile-first entry point, tabs, and private-link room UX.
+- [x] Photo Letters: separate four-photo capture, portable file export/import, side-by-side composite into the existing editor.
+- [x] WebRTC live two-camera connection with Supabase Realtime signaling and presence (STUN-only; experimental).
+- [x] Host-controlled scrapbook frames and approximately synchronized four-shot capture.
+- [x] Camera track cleanup on leave, public-link risk warnings, network failure fallback.
+- [ ] User-side: configure publishable Supabase values, install dependencies, run TypeScript/build, and test two different networks and Android phones over HTTPS.
+- [ ] Real-time on-device subject segmentation, cutout placement and a true common replacement background (next milestone; not bundled in v0.2).
+- [ ] Production TURN relay and stronger connection recovery where needed.
+
+## Phase C - Shared private album with Supabase (later)
 
 - [ ] Link the existing Supabase project via its Project URL and **publishable** key only.
 - [ ] Two private accounts (passwordless email OTP/magic link or another appropriate method).
@@ -24,7 +35,7 @@ The UI concept is approved. Keep all work mobile-first and verify behavior on a 
 - [ ] Local-only and cloud-saving states clearly distinguished; never upload without explicit action.
 - [ ] Invitation, revoke-access and deletion handling.
 
-## Phase C - Extra moments
+## Phase D - Extra moments
 
 - [ ] Advanced freehand selection/brush eraser for custom cutouts.
 - [ ] Optional on-device subject segmentation if practical, with no silent photo uploads.
@@ -32,7 +43,7 @@ The UI concept is approved. Keep all work mobile-first and verify behavior on a 
 - [ ] Animated photo strips/GIFs, sound toggle, photo booth sound effects.
 - [ ] Better first-use tutorial for pinch/rotate and accessibility.
 - [ ] Installable PWA/offline-friendly caching after production behavior stabilizes.
-- [ ] Optional long-distance booth combining photos captured separately on each phone.
+- [x] Optional long-distance booth combining photos captured separately on each phone.
 
 ## Manual acceptance check for Phase A
 
@@ -50,3 +61,7 @@ The UI concept is approved. Keep all work mobile-first and verify behavior on a 
 ## Scope & privacy
 
 This is a just-for-fun couple app with no billing, no analytics tracking, and no public social feed. Keep personal photos out of Git. Supabase is *not yet connected* in Phase A; don't describe browser-local album as synced between devices.
+
+## Acceptance check for Together Apart
+
+See [TOGETHER_APART_SETUP.md](TOGETHER_APART_SETUP.md) for setup, both-phone live tests, Photo Letters steps, privacy cautions and network limitations.

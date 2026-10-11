@@ -20,6 +20,15 @@ npm run dev
 
 Open `http://localhost:5173` on your laptop. **Try the illustrated demo first** to test the editor without granting camera permission.
 
+### Together Apart v0.2 (new)
+
+Two ways to make pictures together while far away:
+
+- **Live Together (experimental):** two camera feeds in a temporary invite-link room using WebRTC and Supabase Realtime signaling, synchronized four-shot countdown, shared scrapbook frame choices and direct handoff to Sticker Playground.
+- **Photo Letters:** independent four-photo captures, portable private `.json` photo packs, offline/asynchronous side-by-side composition, then the normal sticker editor.
+
+The original solo photo booth remains available. The common frame background is a decorative border in v0.2; AI removal of both real backgrounds is planned for a later release. These experimental room links are **not authenticated private rooms** yet. See the complete setup, phone test steps, privacy limits and TURN relay note in [Together Apart setup](docs/TOGETHER_APART_SETUP.md).
+
 ### Features in v0.1
 
 - Responsive scrapbook-style homepage and navigation, designed for mobile touch.
@@ -47,7 +56,7 @@ Open `http://localhost:5173` on your laptop. **Try the illustrated demo first** 
 - Small handcrafted responsive CSS stylesheet (no large CSS framework required)
 - Browser Camera API, Canvas 2D, Pointer Events, IndexedDB, PNG export
 - Static deployment compatible with Cloudflare Pages / Netlify / Vercel
-- Supabase is reserved for the *next* milestone: private two-person log-in and shared album, with RLS + private Storage. No Supabase secrets belong in frontend files.
+- Supabase Realtime is optional in v0.2 for signaling temporary live rooms; private two-person login and shared album with RLS + private Storage remain future work. No secret keys belong in frontend files.
 
 ### Scripts
 
@@ -68,11 +77,11 @@ Use a static host that provides HTTPS, such as Cloudflare Pages. Connect your Gi
 | Build command | `npm run build` |
 | Output directory | `dist` |
 
-Visit the generated HTTPS URL on her phone. The app is mobile-responsive. For a shared cloud album, finish Supabase integration first (future milestone); until then, use **Download Strip** and share the PNG yourself.
+Visit the generated HTTPS URL on her phone. The app is mobile-responsive. Live Together also needs your publishable Supabase variables configured for the Pages deployment. For a shared cloud album, complete the separate Auth/Storage integration later; until then, use **Download Strip** and share the PNG yourself.
 
 ### Supabase project
 
-Your Supabase project can stay active, but **v0.1 doesn't connect to it**. The file `.env.example` is a future-facing template, not something you must configure now. We will add secure passwordless sign-in, member-scoped policies, a private storage bucket, and an album shared across your two accounts in the next milestone.
+The original solo booth and Photo Letters work without Supabase. **Live Together requires only Supabase Realtime** plus the Project URL and publishable key in `.env.local` (or your deployment environment variables). Do not commit that local file. Room links are unlisted, not authenticated; private albums with verified membership and Storage policies will come later. [Full setup guide](docs/TOGETHER_APART_SETUP.md).
 
 ### Code layout
 
@@ -82,6 +91,7 @@ src/
   lib/canvas.ts      # Strip composition and sticker rendering
   lib/cutout.ts      # Browser-only shape/background cutout processing
   lib/photos.ts      # Capture and photo compression
+  lib/togetherPhotos.ts  # Photo Letters and side-by-side composition
   lib/storage.ts     # IndexedDB local album and sticker box
   lib/themes.ts      # Frame themes, pose prompts and sticker catalog
   types.ts           # Domain types
