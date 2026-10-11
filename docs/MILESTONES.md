@@ -16,9 +16,13 @@ The UI concept is approved. Keep all work mobile-first and verify behavior on a 
 ## Phase B - Long-distance photo booth (v0.2)
 
 - [x] Together Apart mobile-first entry point, tabs, and private-link room UX.
-- [x] Photo Letters: separate four-photo capture, portable file export/import, side-by-side composite into the existing editor.
+- [x] Photo Letters: separate four-photo capture, portable file export/import, blended composite into the existing editor.
 - [x] WebRTC live two-camera connection with Supabase Realtime signaling and presence (STUN-only; experimental).
 - [x] Host-controlled scrapbook frames and approximately synchronized four-shot capture.
+- [x] v0.2.1: preview and export share the same frame renderer and crop.
+- [x] v0.2.1: optional close/balanced/classic blend, flip each photo, and per-person horizontal framing sliders.
+- [x] v0.2.1: locally mirrored selfie thumbnail by default, normal partner preview and unmirrored saved output by default.
+- [x] v0.2.1: Photo Letters uses the same composition options and preview.
 - [x] Camera track cleanup on leave, public-link risk warnings, network failure fallback.
 - [ ] User-side: configure publishable Supabase values, install dependencies, run TypeScript/build, and test two different networks and Android phones over HTTPS.
 - [ ] Real-time on-device subject segmentation, cutout placement and a true common replacement background (next milestone; not bundled in v0.2).

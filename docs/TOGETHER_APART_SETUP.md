@@ -1,9 +1,9 @@
-# Together Apart v0.2 - setup and testing
+# Together Apart v0.2.1 - setup and testing
 
 Two ways to take a photo strip together while living apart:
 
 - **Live Together (experimental):** WebRTC connects both cameras. Supabase Realtime carries room presence, call negotiation, theme choices and the countdown. Photos are not uploaded by this feature.
-- **Photo Letters (works offline from the other person):** each person takes/uploads 4 photos, exports a `.json` photo letter, and privately sends it to the other. Once one person has both letters, they can combine four side-by-side photos and continue into the original editor.
+- **Photo Letters (works offline from the other person):** each person takes/uploads 4 photos, exports a `.json` photo letter, and privately sends it to the other. Once one person has both letters, they can combine four photos composed into a shared frame and continue into the original editor.
 
 ## 1. Apply the patch and install dependencies
 
@@ -51,10 +51,12 @@ When deployed, test:
 2. Copy the entire invite link and send it to your girlfriend privately.
 3. She opens the invite link on her phone over HTTPS. It should open the live tab. She allows camera permission.
 4. Verify both participants can see their own camera and the other's camera. Audio is intentionally disabled.
-5. The host changes the scrapbook frame; the guest should see the same selection. Choose 3-second shots for the first run.
-6. The host clicks **take four photos together**. Both receive approximately synchronized countdowns, each generates four side-by-side images, and both can open the Sticker Playground when finished.
-7. Finish and download on both devices, verify the PNG and optional browser-local album. No cloud photo persistence is involved.
-8. Test camera denial, leaving rooms, page refresh, guest disconnect/rejoin and network failure. Switch to Photo Letters if WebRTC cannot connect.
+5. The host changes the scrapbook border and the **Closer Together / Balanced / Classic Split** option. Both screens should show the same combined-photo preview, with no hidden difference in cropping.
+6. Turn on **Flip your photo** and **Flip partner photo** separately; check both previews match. The local *selfie thumbnail* mirror setting is separate and does not change the saved photo.
+7. Move the per-person framing sliders to keep your faces in the combined picture. The composition guide is optional and is not exported.
+8. The host clicks **take four photos together**. Both receive approximately synchronized countdowns, each generates four side-by-side images, and both can open the Sticker Playground when finished.
+9. Finish and download on both devices, verify the PNG and optional browser-local album. No cloud photo persistence is involved.
+10. Test camera denial, leaving rooms, page refresh, guest disconnect/rejoin and network failure. Switch to Photo Letters if WebRTC cannot connect.
 
 ## 4. Test Photo Letters
 
@@ -63,7 +65,7 @@ When deployed, test:
 3. Each clicks **download my photo letter (.json)**. The `.json` contains private embedded camera photos.
 4. Send that file to each other using a private messaging channel, not a public GitHub repository.
 5. Import your partner's `.json` with **choose their photo letter**, or use **or upload their four photos** if they sent normal images instead.
-6. Select a color and optional photo order, click **combine our four pictures**, then decorate, download or save to your own browser-local album.
+6. Select **Closer Together** or **Balanced**, review the first-pair preview, adjust flips and framing, then click **combine our four pictures**, then decorate, download or save to your own browser-local album.
 
 ## Important limits
 
@@ -71,6 +73,16 @@ When deployed, test:
 - **STUN-only connectivity:** some mobile carriers, corporate Wi-Fi networks and symmetric NATs need a TURN relay. This release intentionally does not ship a TURN credential. It shows a failure notice and the Photo Letters fallback is available.
 - **No sound:** camera video only, not a video calling app. Use your normal call app for audio if desired.
 - **Not frame-perfect synchronization:** network timing affects when each phone takes a shot. Both capture their own composition locally, rather than uploading one central master file.
-- **No AI person segmentation yet:** both entire camera views appear in two framed panels. The common background sets the scrapbook border color. Real-time person-only cutouts with one replacement scene need a later on-device segmentation phase with careful Android performance testing.
+- **No AI person segmentation yet:** the soft merge blends full camera images, so strong differences in lighting or rooms will remain visible. The scrapbook background colors the single outer border, not the background behind each person. Removing actual backgrounds requires a later on-device segmentation phase with careful Android performance testing. **Classic Split** is available when a soft blend looks unnatural.
 - **No online album yet:** the album remains local to each browser. Download your important photos; do not depend on browser storage as a backup.
 - **Public repo:** never commit personal photo letters, camera pictures, `.env.local`, or secret keys.
+
+## v0.2.1 framing acceptance checks
+
+1. In the live room, compare each large combined preview to the downloaded image. The large preview should include exactly the same crop, overlap, colors and photo order; the optional dashed safe-area guide and countdown are not saved.
+2. Before the shot, adjust each framing slider; face positions should update immediately on both connected clients when changed by the host.
+3. Verify the host's photo occupies the same left/right side on both devices even when the guest uses the opposite physical camera order.
+4. Test each orientation setting independently: local selfie *thumbnail* mirror, host photo flip, guest photo flip. Saved results should follow only the host/guest photo flips.
+5. With very different real backgrounds, try Balanced or Classic Split. Feathering does not magically remove walls, and can ghost people if both stand within the center overlap.
+6. Offline Photo Letters: import both sets, check first-photo preview, change layout/flip/framing and confirm all four outputs match the selected crop.
+7. On Android over HTTPS, check that the combined preview stays smooth enough, both mini camera tiles remain visible, and controls do not overflow at 360 px.

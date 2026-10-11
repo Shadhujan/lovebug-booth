@@ -20,14 +20,14 @@ npm run dev
 
 Open `http://localhost:5173` on your laptop. **Try the illustrated demo first** to test the editor without granting camera permission.
 
-### Together Apart v0.2 (new)
+### Together Apart v0.2.1 (framing update)
 
 Two ways to make pictures together while far away:
 
-- **Live Together (experimental):** two camera feeds in a temporary invite-link room using WebRTC and Supabase Realtime signaling, synchronized four-shot countdown, shared scrapbook frame choices and direct handoff to Sticker Playground.
-- **Photo Letters:** independent four-photo captures, portable private `.json` photo packs, offline/asynchronous side-by-side composition, then the normal sticker editor.
+- **Live Together (experimental):** two camera feeds in a temporary invite-link room using WebRTC and Supabase Realtime. A single finished-photo preview shows the same crop, blending, mirroring and scrapbook border used in the four captured images. The host can choose Closer Together, Balanced or Classic Split, flip either saved photo, and shift the framing.
+- **Photo Letters:** independent four-photo captures, portable private `.json` photo packs, an editable preview and the same blending/flip/framing modes as live capture, then the normal sticker editor.
 
-The original solo photo booth remains available. The common frame background is a decorative border in v0.2; AI removal of both real backgrounds is planned for a later release. These experimental room links are **not authenticated private rooms** yet. See the complete setup, phone test steps, privacy limits and TURN relay note in [Together Apart setup](docs/TOGETHER_APART_SETUP.md).
+The original solo photo booth remains available. The common frame background is a decorative border. Soft merging joins both photos without a hard white gutter, but it cannot remove room backgrounds; person segmentation and a true shared virtual background are planned separately. These experimental room links are **not authenticated private rooms** yet. See the complete setup, phone test steps, privacy limits and TURN relay note in [Together Apart setup](docs/TOGETHER_APART_SETUP.md).
 
 ### Features in v0.1
 

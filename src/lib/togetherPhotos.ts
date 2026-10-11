@@ -63,74 +63,197 @@ export async function readPhotoLetter(file: File): Promise<PhotoLetter> {
   return { kind: 'lovebug-photo-letter', version: 1, createdAt: typeof pack.createdAt === 'number' ? pack.createdAt : Date.now(), photos: pack.photos };
 }
 
-function background(ctx: CanvasRenderingContext2D, scene: SceneKey, w: number, h: number) {
-  ctx.fillStyle = SCENES[scene].background;
-  ctx.fillRect(0, 0, w, h);
+// The same renderer is used by live preview, live capture, and Photo Letters.
+// Its only input differences are the canvas size and the image sources.
+export type TogetherLayout = 'close' | 'balanced' | 'classic';
+export type TogetherComposition = {
+  scene: SceneKey;
+  swap: boolean;
+  layout: TogetherLayout;
+  mirrorHost: boolean;
+  mirrorGuest: boolean;
+  focusHost: number;
+  focusGuest: number;
+};
+
+export const TOGETHER_WIDTH = 1100;
+export const TOGETHER_HEIGHT = 825;
+export const DEFAULT_COMPOSITION: TogetherComposition = {
+  scene: 'blush', swap: false, layout: 'close',
+  mirrorHost: false, mirrorGuest: false,
+  focusHost: 50, focusGuest: 50,
+};
+
+export function isTogetherComposition(value: unknown): value is TogetherComposition {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<TogetherComposition>;
+  return typeof item.scene === 'string' && Object.prototype.hasOwnProperty.call(SCENES, item.scene)
+    && (item.layout === 'close' || item.layout === 'balanced' || item.layout === 'classic')
+    && typeof item.swap === 'boolean'
+    && typeof item.mirrorHost === 'boolean' && typeof item.mirrorGuest === 'boolean'
+    && typeof item.focusHost === 'number' && Number.isFinite(item.focusHost) && item.focusHost >= 0 && item.focusHost <= 100
+    && typeof item.focusGuest === 'number' && Number.isFinite(item.focusGuest) && item.focusGuest >= 0 && item.focusGuest <= 100;
+}
+
+export type TogetherSource = { image: CanvasImageSource; width: number; height: number };
+
+function scrapbookBackground(ctx: CanvasRenderingContext2D, scene: SceneKey): void {
+  const theme = SCENES[scene];
+  ctx.fillStyle = theme.background;
+  ctx.fillRect(0, 0, TOGETHER_WIDTH, TOGETHER_HEIGHT);
   ctx.save();
-  ctx.globalAlpha = 0.28;
+  ctx.globalAlpha = 0.19;
   ctx.fillStyle = '#ffffff';
-  for (let x = 0; x < w; x += 50) ctx.fillRect(x, 0, 20, h);
-  ctx.globalAlpha = 0.16;
-  for (let y = 0; y < h; y += 50) ctx.fillRect(0, y, w, 20);
+  for (let x = 0; x < TOGETHER_WIDTH; x += 54) ctx.fillRect(x, 0, 22, TOGETHER_HEIGHT);
+  for (let y = 0; y < TOGETHER_HEIGHT; y += 54) ctx.fillRect(0, y, TOGETHER_WIDTH, 22);
   ctx.restore();
 }
 
-function cover(ctx: CanvasRenderingContext2D, image: CanvasImageSource, nativeWidth: number, nativeHeight: number, x: number, y: number, w: number, h: number, mirror: boolean) {
-  if (!nativeWidth || !nativeHeight) throw new Error('Both cameras must be ready to take a picture.');
-  const sourceRatio = nativeWidth / nativeHeight;
-  const destinationRatio = w / h;
-  let sx = 0, sy = 0, sw = nativeWidth, sh = nativeHeight;
-  if (sourceRatio > destinationRatio) { sw = nativeHeight * destinationRatio; sx = (nativeWidth - sw) / 2; }
-  else { sh = nativeWidth / destinationRatio; sy = (nativeHeight - sh) / 2; }
+function coverWithFocus(
+  ctx: CanvasRenderingContext2D, source: TogetherSource, x: number, y: number,
+  w: number, h: number, focalPoint: number, mirror: boolean,
+): void {
+  if (!source.width || !source.height) throw new Error('Both cameras must be ready to take a picture.');
+  let sx = 0, sy = 0, sw = source.width, sh = source.height;
+  const sourceRatio = source.width / source.height;
+  const targetRatio = w / h;
+  if (sourceRatio > targetRatio) {
+    sw = source.height * targetRatio;
+    sx = (source.width - sw) * focalPoint / 100;
+  } else {
+    sh = source.width / targetRatio;
+    sy = (source.height - sh) / 2;
+  }
   ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 19);
-  ctx.clip();
+  // Mirror affects both the shared canvas preview and the exported photo.
   if (mirror) {
-    ctx.translate(2 * x + w, 0);
+    ctx.translate(x * 2 + w, 0);
     ctx.scale(-1, 1);
   }
-  ctx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
+  ctx.drawImage(source.image, sx, sy, sw, sh, x, y, w, h);
   ctx.restore();
 }
 
-function makeCanvas(scene: SceneKey): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1100;
-  canvas.height = 825;
+/**
+ * Draw the single finished booth frame. The video previews are not separately
+ * object-fit cropped; the actual result of this renderer is shown on screen.
+ *
+ * Soft/close mode feathers the whole pictures, not people-only cutouts. A
+ * different room or lighting can still be noticeable until segmentation ships.
+ */
+export function drawTogetherFrame(
+  canvas: HTMLCanvasElement,
+  host: TogetherSource,
+  guest: TogetherSource,
+  composition: TogetherComposition,
+  scratch?: HTMLCanvasElement,
+): void {
+  if (!host.width || !host.height || !guest.width || !guest.height) {
+    throw new Error('Wait for both camera feeds before capturing.');
+  }
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable on this device.');
-  background(ctx, scene, canvas.width, canvas.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 29px Trebuchet MS, sans-serif';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(canvas.width / TOGETHER_WIDTH, 0, 0, canvas.height / TOGETHER_HEIGHT, 0, 0);
+  scrapbookBackground(ctx, composition.scene);
+
+  const photo = { x: 34, y: 76, w: 1032, h: 662 };
+  const left = composition.swap ? guest : host;
+  const right = composition.swap ? host : guest;
+  const mirrorLeft = composition.swap ? composition.mirrorGuest : composition.mirrorHost;
+  const mirrorRight = composition.swap ? composition.mirrorHost : composition.mirrorGuest;
+  const focusLeft = composition.swap ? composition.focusGuest : composition.focusHost;
+  const focusRight = composition.swap ? composition.focusHost : composition.focusGuest;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(photo.x, photo.y, photo.w, photo.h, 16);
+  ctx.clip();
+  ctx.fillStyle = '#f8e9ee';
+  ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
+
+  // A single photo rectangle: no internal white frame, black gap or visible gutter.
+  const overlap = composition.layout === 'close' ? 76 : composition.layout === 'balanced' ? 30 : 0;
+  const sideWidth = (photo.w + overlap) / 2;
+  const rightX = photo.x + photo.w - sideWidth;
+  coverWithFocus(ctx, left, photo.x, photo.y, sideWidth, photo.h, focusLeft, mirrorLeft);
+
+  if (overlap === 0) {
+    coverWithFocus(ctx, right, rightX, photo.y, sideWidth, photo.h, focusRight, mirrorRight);
+  } else {
+    // Reuse one scratch canvas across preview frames to avoid allocating every RAF.
+    const layer = scratch ?? document.createElement('canvas');
+    if (layer.width !== canvas.width) layer.width = canvas.width;
+    if (layer.height !== canvas.height) layer.height = canvas.height;
+    const layerCtx = layer.getContext('2d');
+    if (!layerCtx) throw new Error('Your device could not create the merge layer.');
+    layerCtx.setTransform(1, 0, 0, 1, 0, 0);
+    layerCtx.clearRect(0, 0, layer.width, layer.height);
+    layerCtx.setTransform(layer.width / TOGETHER_WIDTH, 0, 0, layer.height / TOGETHER_HEIGHT, 0, 0);
+    coverWithFocus(layerCtx, right, rightX, photo.y, sideWidth, photo.h, focusRight, mirrorRight);
+    layerCtx.globalCompositeOperation = 'destination-in';
+    const fade = layerCtx.createLinearGradient(rightX, 0, rightX + overlap, 0);
+    fade.addColorStop(0, 'rgba(0,0,0,0)');
+    fade.addColorStop(1, 'rgba(0,0,0,1)');
+    layerCtx.fillStyle = fade;
+    layerCtx.fillRect(rightX, photo.y, sideWidth, photo.h);
+    layerCtx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(layer, 0, 0, TOGETHER_WIDTH, TOGETHER_HEIGHT);
+  }
+
+  // A gentle matching grade across the entire image reduces lighting differences.
+  ctx.fillStyle = 'rgba(255,236,239,0.08)';
+  ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
+  const vignette = ctx.createLinearGradient(photo.x, 0, photo.x + photo.w, 0);
+  vignette.addColorStop(0, 'rgba(78,39,59,0.10)');
+  vignette.addColorStop(0.16, 'rgba(78,39,59,0)');
+  vignette.addColorStop(0.84, 'rgba(78,39,59,0)');
+  vignette.addColorStop(1, 'rgba(78,39,59,0.10)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
+  ctx.restore();
+
   ctx.textAlign = 'center';
-  ctx.fillText('TOGETHER, EVEN FROM FAR AWAY', canvas.width / 2, 58);
+  ctx.fillStyle = '#fffefe';
+  ctx.font = 'bold 24px Trebuchet MS, sans-serif';
+  ctx.fillText('ONE LITTLE PHOTO DATE', TOGETHER_WIDTH / 2, 48);
+  ctx.fillStyle = SCENES[composition.scene].accent;
   ctx.font = 'bold 22px Trebuchet MS, sans-serif';
-  ctx.fillStyle = SCENES[scene].accent;
-  ctx.fillText('YOU + ME  /  LOVEBUG BOOTH', canvas.width / 2, 789);
-  return { canvas, ctx };
+  ctx.fillText('YOU + ME  /  LOVEBUG BOOTH', TOGETHER_WIDTH / 2, 787);
 }
 
-// The v0.2 composition is deliberately side by side. Live person segmentation
-// and a true single-scene green-screen composite are planned separately.
-export function captureLivePair(local: HTMLVideoElement, remote: HTMLVideoElement, scene: SceneKey, swap: boolean): string {
-  const { canvas, ctx } = makeCanvas(scene);
-  const left = swap ? remote : local;
-  const right = swap ? local : remote;
-  cover(ctx, left, left.videoWidth, left.videoHeight, 34, 84, 500, 652, left === local);
-  cover(ctx, right, right.videoWidth, right.videoHeight, 566, 84, 500, 652, right === local);
-  return canvas.toDataURL('image/jpeg', 0.87);
+export function captureLivePair(
+  local: HTMLVideoElement,
+  remote: HTMLVideoElement,
+  composition: TogetherComposition,
+  role: 'host' | 'guest',
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = TOGETHER_WIDTH;
+  canvas.height = TOGETHER_HEIGHT;
+  const mine = { image: local, width: local.videoWidth, height: local.videoHeight };
+  const theirs = { image: remote, width: remote.videoWidth, height: remote.videoHeight };
+  drawTogetherFrame(canvas, role === 'host' ? mine : theirs, role === 'guest' ? mine : theirs, composition);
+  return canvas.toDataURL('image/jpeg', 0.90);
 }
 
-export async function composePhotoLetters(yours: (string | null)[], partner: (string | null)[], scene: SceneKey, swap = false): Promise<string[]> {
+export async function composePhotoLetters(
+  yours: (string | null)[],
+  partner: (string | null)[],
+  composition: TogetherComposition,
+): Promise<string[]> {
   if (!completePhotoSet(yours) || !completePhotoSet(partner)) throw new Error('Both photo letters need four pictures.');
   const pairs = await Promise.all(yours.map(async (photo, index) => [await loadImage(photo), await loadImage(partner[index])] as const));
   return pairs.map(([mine, theirs]) => {
-    const { canvas, ctx } = makeCanvas(scene);
-    const left = swap ? theirs : mine;
-    const right = swap ? mine : theirs;
-    cover(ctx, left, left.naturalWidth, left.naturalHeight, 34, 84, 500, 652, false);
-    cover(ctx, right, right.naturalWidth, right.naturalHeight, 566, 84, 500, 652, false);
-    return canvas.toDataURL('image/jpeg', 0.87);
+    const canvas = document.createElement('canvas');
+    canvas.width = TOGETHER_WIDTH;
+    canvas.height = TOGETHER_HEIGHT;
+    drawTogetherFrame(canvas,
+      { image: mine, width: mine.naturalWidth, height: mine.naturalHeight },
+      { image: theirs, width: theirs.naturalWidth, height: theirs.naturalHeight },
+      composition,
+    );
+    return canvas.toDataURL('image/jpeg', 0.90);
   });
 }

@@ -1,6 +1,7 @@
-import { useRef, useState, type ChangeEvent } from 'react';
-import { compressPhoto } from '../lib/photos';
-import { completePhotoSet, composePhotoLetters, downloadPhotoLetter, readPhotoLetter, SCENES, type SceneKey } from '../lib/togetherPhotos';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { compressPhoto, loadImage } from '../lib/photos';
+import { completePhotoSet, composePhotoLetters, DEFAULT_COMPOSITION, downloadPhotoLetter, drawTogetherFrame, readPhotoLetter, type TogetherComposition } from '../lib/togetherPhotos';
+import TogetherCompositionControls from './TogetherCompositionControls';
 
 type Props = {
   mine: (string | null)[];
@@ -15,12 +16,34 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
   const minePicker = useRef<HTMLInputElement>(null);
   const partnerPicker = useRef<HTMLInputElement>(null);
   const partnerImagesPicker = useRef<HTMLInputElement>(null);
-  const [scene, setScene] = useState<SceneKey>('blush');
-  const [swap, setSwap] = useState(false);
+  const [composition, setComposition] = useState<TogetherComposition>(DEFAULT_COMPOSITION);
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const [firstPair, setFirstPair] = useState<[HTMLImageElement, HTMLImageElement] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const mineDone = completePhotoSet(mine);
   const partnerDone = completePhotoSet(partner);
+
+  useEffect(() => {
+    let active = true;
+    setFirstPair(null);
+    if (mine[0] && partner[0]) {
+      void Promise.all([loadImage(mine[0]), loadImage(partner[0])]).then(images => {
+        if (active) setFirstPair(images as [HTMLImageElement, HTMLImageElement]);
+      }).catch(() => { if (active) setFirstPair(null); });
+    }
+    return () => { active = false; };
+  }, [mine[0], partner[0]]);
+
+  useEffect(() => {
+    if (!firstPair || !previewRef.current) return;
+    const [yours, theirs] = firstPair;
+    drawTogetherFrame(previewRef.current,
+      { image: yours, width: yours.naturalWidth, height: yours.naturalHeight },
+      { image: theirs, width: theirs.naturalWidth, height: theirs.naturalHeight },
+      composition,
+    );
+  }, [firstPair, composition]);
 
   async function uploadMine(files: FileList | null) {
     if (!files?.length) return;
@@ -50,13 +73,13 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
 
   async function combine() {
     setBusy(true); setError('');
-    try { onCombine(await composePhotoLetters(mine, partner, scene, swap)); }
+    try { onCombine(await composePhotoLetters(mine, partner, composition)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not make your combined photos.'); }
     finally { setBusy(false); }
   }
 
   return <section className="together-letters" aria-label="Photo letters, the take-it-later fallback">
-    <div className="together-section-lead"><span className="eyebrow">NO PERFECT TIMING REQUIRED</span><h2>Photo letters <em>for two</em></h2><p>Take your pictures whenever you can. Send her a little photo letter privately, then combine the two sets into four side-by-side memories. No call or Supabase connection needed.</p></div>
+    <div className="together-section-lead"><span className="eyebrow">NO PERFECT TIMING REQUIRED</span><h2>Photo letters <em>for two</em></h2><p>Take your pictures whenever you can. Send a little photo letter privately, then blend your four poses into one shared frame. No call or Supabase connection needed.</p></div>
     <div className="letter-steps">
       <article className="paper-card letter-card">
         <div className="letter-step-number">01 / your little letter</div><h3>Take your four pictures</h3><p>Open your camera or choose four from your phone. Download a photo pack to send to her privately.</p>
@@ -71,13 +94,13 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
         {partnerDone && <p className="letter-success" role="status">Her four photos are here. Time for the magic.</p>}
       </article>
     </div>
-    <div className="paper-card letter-combine"><div><span className="eyebrow">03 / ONE SWEET PHOTO STRIP</span><h3>Bring your pictures together</h3><p>Choose a scrapbook frame color, then combine your four poses with her four poses. After that, use all the usual stickers and doodles.</p></div>
-      <div className="scene-options" role="group" aria-label="Choose common scrapbook background">{(Object.entries(SCENES) as [SceneKey, typeof SCENES[SceneKey]][]).map(([key, item]) => <button key={key} aria-pressed={scene === key} onClick={() => setScene(key)} className={scene === key ? 'active' : ''}><span className="scene-swatch" style={{ background: item.background }} /><span>{item.name}</span></button>)}</div>
-      <label className="letter-swap"><input type="checkbox" checked={swap} onChange={(event: ChangeEvent<HTMLInputElement>) => setSwap(event.target.checked)} /> Put her photos on the left</label>
+    <div className="paper-card letter-combine"><div><span className="eyebrow">03 / ONE SWEET PHOTO STRIP</span><h3>Bring your pictures together</h3><p>Adjust the shared framing below. When the first pictures are ready, you can see exactly how they will look together before saving all four.</p></div>
+      <TogetherCompositionControls value={composition} onChange={setComposition} />
+      {firstPair && <div className="letter-merged-preview"><div><span className="eyebrow">PREVIEW / FIRST PHOTO</span><p>The other three will be framed in exactly the same way.</p></div><canvas ref={previewRef} width={660} height={495} role="img" aria-label="Preview of the first two photos blended into one shared frame" /></div>}
       <button className="pink-button letter-combine-button" disabled={busy || !mineDone || !partnerDone} onClick={() => void combine()}>{busy ? 'making your memory...' : 'combine our four pictures'} <span className="button-icon">&#9825;</span></button>
       {!mineDone || !partnerDone ? <small>Both sets of four photos are required before combining.</small> : null}
       {error && <p className="error-note" role="alert">{error}</p>}
-      <p className="together-help-note">Photo letters stay on your device unless you send them. This version places the two complete photos side by side; removing the original room backgrounds is a future feature.</p>
+      <p className="together-help-note">Photo letters stay on your device unless you send them. This joins two pictures into one frame with a soft fade. Removing the original room backgrounds still needs person segmentation, planned for a later version.</p>
     </div>
     <input ref={minePicker} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { void uploadMine(event.target.files); event.target.value = ''; }} aria-label="Upload your four photos" />
     <input ref={partnerImagesPicker} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { void uploadPartnerImages(event.target.files); event.target.value = ''; }} aria-label="Upload four pictures from your partner" />

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-import { captureLivePair, SCENES, type SceneKey } from '../lib/togetherPhotos';
+import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherComposition } from '../lib/togetherPhotos';
+import TogetherCompositionControls from './TogetherCompositionControls';
 
 const URL_PATTERN = /^[a-f0-9]{32}$/;
 const CLIENT_ID = () => crypto.randomUUID();
@@ -14,8 +15,7 @@ type Message = {
   kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
-  scene?: SceneKey;
-  swap?: boolean;
+  composition?: TogetherComposition;
   seconds?: number;
 };
 type Props = { timer: number; onCompleted: (photos: string[]) => void };
@@ -39,10 +39,6 @@ function roomLink(id: string): string {
   return target.toString();
 }
 
-function isScene(value: unknown): value is SceneKey {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENES, value);
-}
-
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<Message>;
@@ -51,8 +47,9 @@ function isMessage(value: unknown): value is Message {
 
 export default function LiveTogether({ timer, onCompleted }: Props) {
   const [room, setRoom] = useState<Room | null>(initialRoom);
-  const [scene, setScene] = useState<SceneKey>('blush');
-  const [swap, setSwap] = useState(false);
+  const [composition, setComposition] = useState<TogetherComposition>(DEFAULT_COMPOSITION);
+  const [mirrorSelfView, setMirrorSelfView] = useState(true);
+  const [showGuides, setShowGuides] = useState(true);
   const [shotTimer, setShotTimer] = useState([3, 5, 10].includes(timer) ? timer : 3);
   const [status, setStatus] = useState('Create a room or open the invite from your partner.');
   const [notice, setNotice] = useState('');
@@ -65,6 +62,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [shots, setShots] = useState<string[]>([]);
   const [shooting, setShooting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -75,12 +73,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const queuedIceRef = useRef<RTCIceCandidateInit[]>([]);
   const operationRef = useRef(0);
   const connectedRef = useRef(false);
-  const sceneRef = useRef(scene);
-  const swapRef = useRef(swap);
-  sceneRef.current = scene;
-  swapRef.current = swap;
+  const compositionRef = useRef(composition);
+  compositionRef.current = composition;
   const shootingRef = useRef(false);
-  const runSequenceRef = useRef<(scene: SceneKey, swap: boolean, seconds: number) => Promise<void>>(async () => undefined);
+  const runSequenceRef = useRef<(selected: TogetherComposition, seconds: number) => Promise<void>>(async () => undefined);
   const clientIdRef = useRef(CLIENT_ID());
 
   function send(message: Omit<Message, 'from'>) {
@@ -91,7 +87,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     });
   }
 
-  async function runSequence(selectedScene: SceneKey, selectedSwap: boolean, seconds: number) {
+  async function runSequence(selected: TogetherComposition, seconds: number) {
     if (shootingRef.current) return;
     if (!localVideoRef.current?.videoWidth || !remoteVideoRef.current?.videoWidth || !connectedRef.current) {
       setNotice('Wait until both camera feeds are connected.'); return;
@@ -112,9 +108,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         const mine = localVideoRef.current;
         const theirs = remoteVideoRef.current;
         if (!mine || !theirs) throw new Error('A camera disconnected during the countdown.');
-        // Keep the host on the same side on both participants' photo strips.
-        const guestSwap = room?.role === 'guest' ? !selectedSwap : selectedSwap;
-        made.push(captureLivePair(mine, theirs, selectedScene, guestSwap));
+        // Host/guest source ordering is identical on both devices, including mirrors.
+        made.push(captureLivePair(mine, theirs, selected, room?.role ?? 'host'));
         setShotCount(made.length); setCount(null);
         await sleep(450);
       }
@@ -192,14 +187,14 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (raw.from === clientId || (raw.to && raw.to !== clientId)) return;
       if (otherIdRef.current && otherIdRef.current !== raw.from) return;
       if (raw.kind === 'scene') {
-        if (joinedRoom.role === 'guest' && isScene(raw.scene)) { setScene(raw.scene); setSwap(Boolean(raw.swap)); }
+        if (joinedRoom.role === 'guest' && isTogetherComposition(raw.composition)) { setComposition(raw.composition); compositionRef.current = raw.composition; }
         return;
       }
       if (raw.kind === 'shoot') {
-        if (joinedRoom.role === 'guest' && isScene(raw.scene) && connectedRef.current) {
-          setScene(raw.scene);
-          setSwap(Boolean(raw.swap));
-          await runSequenceRef.current(raw.scene, Boolean(raw.swap), [3, 5, 10].includes(raw.seconds ?? -1) ? raw.seconds! : 3);
+        if (joinedRoom.role === 'guest' && isTogetherComposition(raw.composition) && connectedRef.current) {
+          setComposition(raw.composition);
+          compositionRef.current = raw.composition;
+          await runSequenceRef.current(raw.composition, [3, 5, 10].includes(raw.seconds ?? -1) ? raw.seconds! : 3);
         }
         return;
       }
@@ -234,7 +229,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         publish({ kind: 'offer', to, sdp: pc.localDescription ?? undefined });
-        publish({ kind: 'scene', to, scene: sceneRef.current, swap: swapRef.current });
+        publish({ kind: 'scene', to, composition: compositionRef.current });
         setStatus('Connecting your cameras...');
       } catch (reason) {
         if (active) setNotice(reason instanceof Error ? reason.message : 'Could not start the call.');
@@ -346,31 +341,68 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     catch { setNotice('Please select the invite link below and copy it manually.'); }
   }
 
-  function selectScene(value: SceneKey) {
-    if (room?.role !== 'host') return;
-    setScene(value);
-    send({ kind: 'scene', scene: value, swap });
-  }
-
-  function selectSwap(value: boolean) {
-    if (room?.role !== 'host') return;
-    setSwap(value);
-    send({ kind: 'scene', scene, swap: value });
+  function selectComposition(value: TogetherComposition) {
+    if (room?.role !== 'host' || shootingRef.current) return;
+    setComposition(value);
+    compositionRef.current = value;
+    send({ kind: 'scene', composition: value });
   }
 
   function startSharedShots() {
     if (!room || room.role !== 'host' || shootingRef.current || !connected || !remoteReady) return;
-    send({ kind: 'shoot', scene, swap, seconds: shotTimer });
-    void runSequenceRef.current(scene, swap, shotTimer);
+    const selected = compositionRef.current;
+    send({ kind: 'shoot', composition: selected, seconds: shotTimer });
+    void runSequenceRef.current(selected, shotTimer);
   }
+
+  // Preview and JPEG export use the same drawing function, crop and orientation.
+  // Render at 15 fps to avoid needless phone battery drain. Canvas is decorative
+  // only; it never uploads video frames or camera images.
+  useEffect(() => {
+    if (!room || !connected || !localReady || !remoteReady) return;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const scratch = document.createElement('canvas');
+    let request = 0;
+    let lastDraw = 0;
+    const draw = (time: number) => {
+      if (time - lastDraw >= 65) {
+        const mine = localVideoRef.current;
+        const theirs = remoteVideoRef.current;
+        if (mine?.videoWidth && theirs?.videoWidth) {
+          const localSource = { image: mine, width: mine.videoWidth, height: mine.videoHeight };
+          const remoteSource = { image: theirs, width: theirs.videoWidth, height: theirs.videoHeight };
+          try {
+            drawTogetherFrame(canvas,
+              room.role === 'host' ? localSource : remoteSource,
+              room.role === 'guest' ? localSource : remoteSource,
+              compositionRef.current, scratch);
+          } catch { /* Video frames can briefly be unavailable during reconnection. */ }
+          lastDraw = time;
+        }
+      }
+      request = window.requestAnimationFrame(draw);
+    };
+    request = window.requestAnimationFrame(draw);
+    return () => window.cancelAnimationFrame(request);
+  }, [room, connected, localReady, remoteReady]);
 
   return <section className="live-together" aria-label="Live remote photo booth">
     {!supabase && <div className="together-config-note" role="status"><strong>One-time setup needed for live rooms.</strong> Add your Supabase project URL and publishable key to <code>.env.local</code>, then restart Vite. The Photo Letters tab works without it.</div>}
     {!room ? <div className="paper-card live-lobby"><div className="live-lobby-icon">&#9825;</div><h2>A little room for two</h2><p>Create a private-link room, then send the link to your girlfriend. Once both cameras connect, you can capture four combined photos. No microphones, no recording, and no cloud photo upload.</p><button className="pink-button" disabled={!supabase} onClick={createRoom}>create our photo room <span className="button-icon">&#8599;</span></button><small>The link is unlisted, not authenticated. Anyone with it may join. Only share it privately.</small></div> : <>
       <div className="paper-card live-invite"><div><span className="eyebrow">OUR LITTLE ROOM</span><h2>{room.role === 'host' ? 'Invite your favorite person' : 'You joined their room'}</h2><p className="live-status" role="status">{status}</p></div><div className="live-invite-actions"><label htmlFor="live-invite-link">Invite link</label><div className="live-share-row"><input id="live-invite-link" aria-label="Invite link" readOnly value={roomLink(room.id)} onFocus={(event: FocusEvent<HTMLInputElement>) => event.target.select()} /><button className="soft-button" onClick={() => void copyLink()}>{copied ? 'copied!' : 'copy link'}</button></div><button className="plain-button" onClick={leaveRoom}>leave this room</button></div></div>
-      <div className="live-cameras"><div className="paper-card live-camera-card"><div className="live-camera-label">you <span>{localReady ? 'camera on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className="live-local-video" aria-label="Your camera" />{!localReady && <span className="live-video-placeholder">waking up your camera...</span>}{count !== null && <div className="live-count-overlay">{count}</div>}</div></div><div className="paper-card live-camera-card"><div className="live-camera-label">your lovebug <span>{remoteReady && connected ? 'here with you' : peerPresent ? 'connecting' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting for that cute face...</span>}</div></div></div>
-      <div className="paper-card live-controls"><div className="eyebrow">YOUR LITTLE PHOTO DATE</div><h3>Choose a common frame</h3><p>Both of you see each other live in separate frames. For now, the backgrounds behind each person remain visible.</p><div className="scene-options" role="group" aria-label="Choose shared photo frame">{(Object.entries(SCENES) as [SceneKey, typeof SCENES[SceneKey]][]).map(([id,item]) => <button key={id} aria-pressed={scene === id} className={scene === id ? 'active' : ''} disabled={room.role !== 'host' || shooting} onClick={() => selectScene(id)}><span className="scene-swatch" style={{ background: item.background }}/>{item.name}</button>)}</div>
-      {room.role === 'host' && <label className="letter-swap"><input type="checkbox" checked={swap} disabled={shooting} onChange={(event: ChangeEvent<HTMLInputElement>) => selectSwap(event.target.checked)} /> Put her camera on the left</label>}
+      <div className="paper-card live-main-preview">
+        <div className="live-stage-header"><div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame is the whole photo. No hidden portrait crop after the countdown.</p></div><label className="together-toggle"><input type="checkbox" checked={showGuides} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowGuides(event.target.checked)} /> Show composition guides</label></div>
+        <div className="live-stage-frame"><canvas ref={previewCanvasRef} width={660} height={495} aria-label="Live preview of the exact combined photo, including the chosen crop and mirrors" role="img" />
+          {(!connected || !remoteReady || !localReady) && <div className="live-stage-waiting">{peerPresent ? 'Joining your cameras into one photo...' : 'Waiting for your favorite person to join...'}</div>}
+          {showGuides && connected && remoteReady && <div className="live-stage-guides" aria-hidden="true"><span>your shared photo</span></div>}
+          {count !== null && <div className="live-count-overlay" aria-label={`Taking photo in ${count}`}>{count}</div>}
+        </div>
+        <div className="live-mini-cameras"><div className="live-mini-camera"><div className="live-camera-label">your camera <span>{localReady ? 'on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className={mirrorSelfView ? 'live-local-video' : ''} aria-label="Your private selfie preview" />{!localReady && <span className="live-video-placeholder">waking up...</span>}</div></div><div className="live-mini-camera"><div className="live-camera-label">your lovebug <span>{connected && remoteReady ? 'here with you' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera thumbnail" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting...</span>}</div></div></div>
+        <label className="together-toggle selfie-flip"><input type="checkbox" checked={mirrorSelfView} onChange={(event: ChangeEvent<HTMLInputElement>) => setMirrorSelfView(event.target.checked)} /> Mirror my little selfie tile (only my tile, not the saved photo)</label>
+      </div>
+      <div className="paper-card live-controls"><div className="eyebrow">YOUR LITTLE PHOTO DATE</div><h3>Make this one picture ours</h3><p>Try Closer Together. Adjust what both of you see before taking photos; the saved images use this exact framing.</p>
+      <TogetherCompositionControls value={composition} onChange={selectComposition} disabled={room.role !== 'host' || shooting} mineLabel={room.role === 'host' ? 'Your' : "Your lovebug's"} partnerLabel={room.role === 'host' ? "Your lovebug's" : 'Your'} />
       {room.role === 'host' && <div className="live-timer"><span>Countdown per photo</span><div role="group" aria-label="Choose countdown seconds">{[3,5,10].map(value => <button key={value} className={shotTimer === value ? 'active' : ''} aria-pressed={shotTimer === value} disabled={shooting} onClick={() => setShotTimer(value)}>{value}s</button>)}</div></div>}
       <div className="live-shoot-row"><button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button><span>{room.role === 'guest' ? 'Your partner starts the countdown.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span></div>
       {shotCount > 0 && <div className="live-shot-progress" aria-label={`${shotCount} of 4 photos captured`}>{[0,1,2,3].map(index => <span key={index} className={index < shotCount ? 'done' : ''}>{index < shotCount ? '\u2665' : index + 1}</span>)}</div>}
