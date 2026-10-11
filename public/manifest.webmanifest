@@ -1,0 +1,10 @@
+{
+  "name": "Lovebug Booth - our little photobooth",
+  "short_name": "Lovebug Booth",
+  "description": "Four photos, two lovebugs, lots of stickers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff7f6",
+  "theme_color": "#fff7f6",
+  "icons": [{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
