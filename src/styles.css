@@ -71,3 +71,80 @@
 @media(prefers-reduced-motion:reduce){.together-layout-options button{transition:none}}
 .together-layout-options button:disabled,.together-composition-settings .scene-options button:disabled{opacity:1;cursor:default}
 .together-slider-tip{color:#987486!important}
+
+/* Together Apart v0.2.2: full-size photo + reachable controls.
+   Desktop gets a side inspector; smaller screens get a nonmodal bottom drawer.
+   The 850px / 4:3 capture preview above is deliberately unchanged. */
+.live-booth-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;min-width:0;align-items:start}
+.live-booth-workspace>.live-main-preview{min-width:0}
+.live-stage-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.live-adjust-trigger{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #dfa3ba;border-radius:999px;padding:11px 17px;background:#ffedf3;color:#a1496b;font-size:12px;font-weight:900;cursor:pointer;min-height:44px;transition:background .2s var(--ease),transform .2s var(--ease)}
+.live-adjust-trigger:hover{background:#fbd6e3;transform:translateY(-1px)}
+.live-adjust-trigger:focus-visible,.live-adjust-close:focus-visible{outline:3px solid #ac4776;outline-offset:3px}
+.live-adjust-trigger span{font-size:17px;line-height:1}
+.live-preview-shoot{width:min(100%,850px);margin-inline:auto;padding:12px 14px;background:#fff5f7;border:1px solid #f5d5e0;border-radius:17px;justify-content:space-between}
+.live-preview-shoot .pink-button{min-height:48px}
+.live-preview-shoot>span{max-width:230px;line-height:1.6}
+.live-privacy-note{font-size:11px;color:#ac8b96;line-height:1.65}
+.live-adjust-heading{display:flex;gap:12px;align-items:start;justify-content:space-between}
+.live-adjust-heading .eyebrow{margin-bottom:5px}
+.live-adjust-heading h3{line-height:1.25}
+.live-adjust-heading p{font-size:12px;color:#a17a88;line-height:1.55;margin:6px 0 0}
+.live-adjust-mobile-title{display:none}
+.live-adjust-close{display:none;border:1px solid #eeb9cc;background:#ffe6ee;color:#a4486e;border-radius:999px;padding:8px 10px 8px 14px;align-items:center;gap:8px;font-size:12px;font-weight:900;cursor:pointer;min-height:40px}
+.live-adjust-close span{display:grid;place-items:center;border-radius:50%;width:22px;height:22px;background:white;font-size:16px}
+.live-adjust-mini-preview{display:none}
+.live-adjust-footer{display:none}
+@media(min-width:1250px){
+  .live-booth-workspace{grid-template-columns:minmax(0,912px) minmax(0,1fr);gap:18px}
+  .live-booth-workspace>.live-main-preview{width:100%}
+  .live-booth-workspace>.live-controls{position:sticky;top:14px;align-self:start;max-height:min(78dvh,720px);min-height:240px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#eebdcf transparent;padding:20px 15px;gap:14px}
+  .live-controls .together-layout-options{grid-template-columns:1fr;gap:7px}
+  .live-controls .together-layout-options button{padding:10px 11px}
+  .live-controls .together-layout-options small{font-size:10px}
+  .live-controls .scene-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .live-controls .scene-options button{padding:7px 5px;min-height:80px;font-size:10px}
+  .live-controls .scene-swatch{height:28px}
+  .live-controls .together-focus-grid{grid-template-columns:1fr;gap:9px}
+  .live-controls .together-focus-grid label{padding:11px 9px}
+  .live-controls .together-framing-grid{display:grid;gap:11px}
+  .live-controls .together-toggle{font-size:11px}
+  .live-controls .together-composition-settings{gap:12px}
+  .live-controls .live-timer{gap:8px}
+  .live-controls h3{font-size:20px}
+  .live-adjust-trigger{display:none}
+}
+@media(max-width:1249px){
+  .live-booth-workspace>.live-controls{display:none}
+  .live-booth-workspace>.live-controls.live-controls-open{display:grid;position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(calc(100vw - 18px),620px);max-height:min(55dvh,485px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#eebdcf transparent;background:#fffbfa;border:1px solid #ebb5ca;border-bottom:0;border-radius:24px 24px 0 0;padding:17px 19px calc(17px + env(safe-area-inset-bottom,0px));gap:13px;box-shadow:0 -14px 42px #89506640}
+  .live-adjust-close{display:inline-flex;flex:0 0 auto}
+  .live-adjust-desktop-title{display:none}
+  .live-adjust-mobile-title{display:inline}
+  .live-adjust-heading{position:sticky;top:-17px;z-index:2;background:#fffbfa;padding:4px 0 12px;margin-bottom:0;border-bottom:1px solid #fae2e9}
+  .live-adjust-heading h3{font-size:19px}
+  .live-adjust-mini-preview{position:sticky;z-index:1;top:55px;background:#fffbfa;padding:9px 0 12px;display:flex;gap:13px;align-items:center;border-bottom:1px solid #fae2e9}
+  .live-adjust-mini-preview p{margin:0;font-size:12px;line-height:1.5;color:#a47c8c;flex:1}
+  .live-adjust-mini-frame{width:138px;max-width:42%;aspect-ratio:4/3;position:relative;border:3px solid #fff;border-radius:11px;outline:1px solid #edb8c8;overflow:hidden;background:#f5e5ed;flex:0 0 auto}
+  .live-adjust-mini-frame canvas{width:100%;height:100%;display:block}
+  .live-adjust-mini-frame span{position:absolute;inset:0;display:grid;place-items:center;background:#fff7f9d9;color:#b66c89;font-size:10px;text-align:center;padding:7px}
+  .live-adjust-footer{position:sticky;z-index:2;bottom:calc(-17px - env(safe-area-inset-bottom,0px));display:flex;justify-content:flex-end;padding:12px 0 calc(10px + env(safe-area-inset-bottom,0px));margin-bottom:calc(-17px - env(safe-area-inset-bottom,0px));background:#fffbfa;border-top:1px solid #fae2e9}
+  .live-adjust-footer .soft-button{min-height:40px;padding:8px 16px;font-size:12px}
+  .live-stage-frame{scroll-margin-top:13px}
+}
+@media(min-width:761px) and (max-width:1249px){
+  .live-booth-workspace>.live-controls.live-controls-open{left:auto;right:18px;bottom:18px;transform:none;width:min(350px,calc(100vw - 28px));max-height:min(70dvh,600px);border-bottom:1px solid #ebb5ca;border-radius:22px;padding-bottom:17px}
+  .live-adjust-footer{bottom:-17px;margin-bottom:-17px;padding-bottom:12px}
+}
+@media(max-width:760px){
+  .live-stage-header{gap:13px}
+  .live-stage-actions{width:100%;justify-content:space-between;gap:8px}
+  .live-stage-actions .together-toggle{font-size:11px}
+  .live-adjust-trigger{padding:10px 13px;font-size:11px}
+  .live-preview-shoot{padding:10px;gap:9px}
+  .live-preview-shoot .pink-button{flex:1}
+  .live-preview-shoot>span{width:100%;max-width:none;text-align:center}
+  .live-adjust-mini-frame{width:116px}
+  .live-adjust-heading p{display:none}
+  .live-booth-workspace.live-adjusting{padding-bottom:65dvh}
+}
+@media(prefers-reduced-motion:reduce){.live-adjust-trigger{transition:none}}

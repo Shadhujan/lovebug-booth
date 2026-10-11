@@ -86,3 +86,20 @@ When deployed, test:
 5. With very different real backgrounds, try Balanced or Classic Split. Feathering does not magically remove walls, and can ghost people if both stand within the center overlap.
 6. Offline Photo Letters: import both sets, check first-photo preview, change layout/flip/framing and confirm all four outputs match the selected crop.
 7. On Android over HTTPS, check that the combined preview stays smooth enough, both mini camera tiles remain visible, and controls do not overflow at 360 px.
+
+## v0.2.2: adjustments while viewing the photo
+
+- On a wide desktop (1250px viewport or above), a **scrollable adjustment inspector** appears beside the original 850px-wide live composition. Scroll the inspector, not the page, while adjusting; the photo preview stays visible at its original size.
+- On smaller desktops, tablets, and phones, press **adjust our photo** above the picture to open the adjustment drawer without changing the picture's size. The app scrolls the full-size photo into view and provides a continuously refreshed small copy inside the drawer. Close the drawer with **done**, **done adjusting**, or `Escape`.
+- The live photo preview and the drawer's small preview use the same composition pixels. The second preview is only a visual aid; it does not alter cropping, zoom, or image resolution.
+- The **take four photos together** button now sits immediately under the full-size picture. Starting the countdown closes the drawer automatically so neither person misses the shot. The shot progress, result thumbnails, and **decorate our photos** button remain below the preview.
+- The guest can inspect the same settings but cannot modify the host's shared composition. Mirroring of the local selfie thumbnail is unchanged.
+- No new Supabase tables, keys, packages, or database migrations are needed.
+
+### Visual acceptance checks
+
+1. On a 1440px desktop, verify the live composition stays 850px wide while the adjustment inspector is visible alongside it. Scroll the inspector to the bottom and keep the photo in view.
+2. At 1100px viewport width, open the adjustment panel using its button; it may float over the edge of the main photo, but its miniature shows the entire picture so you can still see framing changes.
+3. On Android/iPhone widths around 360-430px, tap **adjust our photo**. The main picture must keep its original width and remain visible above the bottom drawer. Adjust layout, crop, border, and mirror. The miniature preview must update along with the main frame.
+4. Close and reopen the drawer, then use the capture button near the picture. The drawer must close for the countdown. After four photos, use **decorate our photos** to enter the existing editor.
+5. Confirm Photo Letters, the solo booth, and sticker tools are unchanged.

@@ -50,6 +50,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [composition, setComposition] = useState<TogetherComposition>(DEFAULT_COMPOSITION);
   const [mirrorSelfView, setMirrorSelfView] = useState(true);
   const [showGuides, setShowGuides] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shotTimer, setShotTimer] = useState([3, 5, 10].includes(timer) ? timer : 3);
   const [status, setStatus] = useState('Create a room or open the invite from your partner.');
   const [notice, setNotice] = useState('');
@@ -63,6 +64,11 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [shooting, setShooting] = useState(false);
   const [copied, setCopied] = useState(false);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const compactPreviewRef = useRef<HTMLCanvasElement>(null);
+  const previewFrameRef = useRef<HTMLDivElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -93,6 +99,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       setNotice('Wait until both camera feeds are connected.'); return;
     }
     shootingRef.current = true;
+    setSettingsOpen(false); // Leave the entire photo visible during the countdown.
     const operation = operationRef.current;
     setNotice(''); setShotCount(0); setShots([]); setShooting(true);
     const made: string[] = [];
@@ -333,6 +340,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     window.history.replaceState(null, '', next.pathname + next.search + next.hash);
     setRoom(null); setCopied(false); setNotice(''); setStatus('Create a room or open an invite.');
     setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
+    setSettingsOpen(false);
   }
 
   async function copyLink() {
@@ -348,8 +356,33 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     send({ kind: 'scene', composition: value });
   }
 
+  function openAdjustments() {
+    setSettingsOpen(true);
+    // On phones and compact laptops, bring the full-size photo above the
+    // bottom inspector. The inspector never changes the photo's dimensions.
+    if (window.matchMedia('(max-width: 1249px)').matches) {
+      window.requestAnimationFrame(() => {
+        previewFrameRef.current?.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+          block: 'start',
+        });
+        settingsPanelRef.current?.scrollTo({ top: 0 });
+      });
+    }
+  }
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [settingsOpen]);
+
   function startSharedShots() {
     if (!room || room.role !== 'host' || shootingRef.current || !connected || !remoteReady) return;
+    setSettingsOpen(false);
     const selected = compositionRef.current;
     send({ kind: 'shoot', composition: selected, seconds: shotTimer });
     void runSequenceRef.current(selected, shotTimer);
@@ -377,6 +410,12 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
               room.role === 'host' ? localSource : remoteSource,
               room.role === 'guest' ? localSource : remoteSource,
               compositionRef.current, scratch);
+            // The mobile inspector displays a live, reduced-resolution copy
+            // of the *same* composited frame. No second cropping algorithm.
+            if (settingsOpenRef.current && compactPreviewRef.current) {
+              const mini = compactPreviewRef.current;
+              mini.getContext('2d')?.drawImage(canvas, 0, 0, mini.width, mini.height);
+            }
           } catch { /* Video frames can briefly be unavailable during reconnection. */ }
           lastDraw = time;
         }
@@ -391,24 +430,47 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     {!supabase && <div className="together-config-note" role="status"><strong>One-time setup needed for live rooms.</strong> Add your Supabase project URL and publishable key to <code>.env.local</code>, then restart Vite. The Photo Letters tab works without it.</div>}
     {!room ? <div className="paper-card live-lobby"><div className="live-lobby-icon">&#9825;</div><h2>A little room for two</h2><p>Create a private-link room, then send the link to your girlfriend. Once both cameras connect, you can capture four combined photos. No microphones, no recording, and no cloud photo upload.</p><button className="pink-button" disabled={!supabase} onClick={createRoom}>create our photo room <span className="button-icon">&#8599;</span></button><small>The link is unlisted, not authenticated. Anyone with it may join. Only share it privately.</small></div> : <>
       <div className="paper-card live-invite"><div><span className="eyebrow">OUR LITTLE ROOM</span><h2>{room.role === 'host' ? 'Invite your favorite person' : 'You joined their room'}</h2><p className="live-status" role="status">{status}</p></div><div className="live-invite-actions"><label htmlFor="live-invite-link">Invite link</label><div className="live-share-row"><input id="live-invite-link" aria-label="Invite link" readOnly value={roomLink(room.id)} onFocus={(event: FocusEvent<HTMLInputElement>) => event.target.select()} /><button className="soft-button" onClick={() => void copyLink()}>{copied ? 'copied!' : 'copy link'}</button></div><button className="plain-button" onClick={leaveRoom}>leave this room</button></div></div>
-      <div className="paper-card live-main-preview">
-        <div className="live-stage-header"><div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame is the whole photo. No hidden portrait crop after the countdown.</p></div><label className="together-toggle"><input type="checkbox" checked={showGuides} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowGuides(event.target.checked)} /> Show composition guides</label></div>
-        <div className="live-stage-frame"><canvas ref={previewCanvasRef} width={660} height={495} aria-label="Live preview of the exact combined photo, including the chosen crop and mirrors" role="img" />
-          {(!connected || !remoteReady || !localReady) && <div className="live-stage-waiting">{peerPresent ? 'Joining your cameras into one photo...' : 'Waiting for your favorite person to join...'}</div>}
-          {showGuides && connected && remoteReady && <div className="live-stage-guides" aria-hidden="true"><span>your shared photo</span></div>}
-          {count !== null && <div className="live-count-overlay" aria-label={`Taking photo in ${count}`}>{count}</div>}
+      <div className={`live-booth-workspace ${settingsOpen ? 'live-adjusting' : ''}`}>
+        <div className="paper-card live-main-preview">
+          <div className="live-stage-header">
+            <div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame is the whole photo. No hidden portrait crop after the countdown.</p></div>
+            <div className="live-stage-actions">
+              <label className="together-toggle"><input type="checkbox" checked={showGuides} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowGuides(event.target.checked)} /> Show composition guides</label>
+              <button type="button" className="live-adjust-trigger" aria-controls="live-adjust-panel" aria-expanded={settingsOpen} onClick={openAdjustments}>
+                <span aria-hidden="true">✿</span> adjust our photo
+              </button>
+            </div>
+          </div>
+          <div className="live-stage-frame" ref={previewFrameRef}><canvas ref={previewCanvasRef} width={660} height={495} aria-label="Live preview of the exact combined photo, including the chosen crop and mirrors" role="img" />
+            {(!connected || !remoteReady || !localReady) && <div className="live-stage-waiting">{peerPresent ? 'Joining your cameras into one photo...' : 'Waiting for your favorite person to join...'}</div>}
+            {showGuides && connected && remoteReady && <div className="live-stage-guides" aria-hidden="true"><span>your shared photo</span></div>}
+            {count !== null && <div className="live-count-overlay" aria-label={`Taking photo in ${count}`}>{count}</div>}
+          </div>
+          <div className="live-shoot-row live-preview-shoot">
+            <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
+            <span>{room.role === 'guest' ? 'Your partner starts the countdown.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span>
+          </div>
+          <div className="live-mini-cameras"><div className="live-mini-camera"><div className="live-camera-label">your camera <span>{localReady ? 'on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className={mirrorSelfView ? 'live-local-video' : ''} aria-label="Your private selfie preview" />{!localReady && <span className="live-video-placeholder">waking up...</span>}</div></div><div className="live-mini-camera"><div className="live-camera-label">your lovebug <span>{connected && remoteReady ? 'here with you' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera thumbnail" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting...</span>}</div></div></div>
+          <label className="together-toggle selfie-flip"><input type="checkbox" checked={mirrorSelfView} onChange={(event: ChangeEvent<HTMLInputElement>) => setMirrorSelfView(event.target.checked)} /> Mirror my little selfie tile (only my tile, not the saved photo)</label>
+          {shotCount > 0 && <div className="live-shot-progress" aria-label={`${shotCount} of 4 photos captured`}>{[0,1,2,3].map(index => <span key={index} className={index < shotCount ? 'done' : ''}>{index < shotCount ? '\u2665' : index + 1}</span>)}</div>}
+          {shots.length === 4 && <div className="live-finished"><div className="live-finished-preview">{shots.map((item,index) => <img key={index} src={item} alt={`Combined live picture ${index + 1}`} />)}</div><button className="pink-button" onClick={finishPhotos}>decorate our photos &#8599;</button></div>}
+          {notice && <p role="alert" className="error-note">{notice}</p>}
+          <small className="live-privacy-note">Camera video streams directly between browsers using WebRTC. Supabase only relays connection messages and the countdown. Some networks need a TURN relay; if it fails, switch to Photo Letters.</small>
         </div>
-        <div className="live-mini-cameras"><div className="live-mini-camera"><div className="live-camera-label">your camera <span>{localReady ? 'on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className={mirrorSelfView ? 'live-local-video' : ''} aria-label="Your private selfie preview" />{!localReady && <span className="live-video-placeholder">waking up...</span>}</div></div><div className="live-mini-camera"><div className="live-camera-label">your lovebug <span>{connected && remoteReady ? 'here with you' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera thumbnail" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting...</span>}</div></div></div>
-        <label className="together-toggle selfie-flip"><input type="checkbox" checked={mirrorSelfView} onChange={(event: ChangeEvent<HTMLInputElement>) => setMirrorSelfView(event.target.checked)} /> Mirror my little selfie tile (only my tile, not the saved photo)</label>
+        <div id="live-adjust-panel" className={`paper-card live-controls ${settingsOpen ? 'live-controls-open' : ''}`} ref={settingsPanelRef} role="region" aria-label="Together Apart photo adjustments">
+          <div className="live-adjust-heading">
+            <div><div className="eyebrow">YOUR LITTLE PHOTO DATE</div><h3><span className="live-adjust-desktop-title">Make this one picture ours</span><span className="live-adjust-mobile-title">Adjust our photo ♡</span></h3><p>Changes appear instantly in your shared photo.</p></div>
+            <button type="button" className="live-adjust-close" onClick={() => setSettingsOpen(false)} aria-label="Close photo adjustments">done <span aria-hidden="true">×</span></button>
+          </div>
+          <div className="live-adjust-mini-preview">
+            <div className="live-adjust-mini-frame"><canvas ref={compactPreviewRef} width={220} height={165} role="img" aria-label="Live miniature of your exact shared photo" />{(!connected || !remoteReady || !localReady) && <span>your photo appears here ♡</span>}</div>
+            <p>Your little photo, live. Adjust below and watch it change.</p>
+          </div>
+          <TogetherCompositionControls value={composition} onChange={selectComposition} disabled={room.role !== 'host' || shooting} mineLabel={room.role === 'host' ? 'Your' : "Your lovebug's"} partnerLabel={room.role === 'host' ? "Your lovebug's" : 'Your'} />
+          {room.role === 'host' && <div className="live-timer"><span>Countdown per photo</span><div role="group" aria-label="Choose countdown seconds">{[3,5,10].map(value => <button key={value} className={shotTimer === value ? 'active' : ''} aria-pressed={shotTimer === value} disabled={shooting} onClick={() => setShotTimer(value)}>{value}s</button>)}</div></div>}
+          <div className="live-adjust-footer"><button className="soft-button" type="button" onClick={() => setSettingsOpen(false)}>done adjusting ♡</button></div>
+        </div>
       </div>
-      <div className="paper-card live-controls"><div className="eyebrow">YOUR LITTLE PHOTO DATE</div><h3>Make this one picture ours</h3><p>Try Closer Together. Adjust what both of you see before taking photos; the saved images use this exact framing.</p>
-      <TogetherCompositionControls value={composition} onChange={selectComposition} disabled={room.role !== 'host' || shooting} mineLabel={room.role === 'host' ? 'Your' : "Your lovebug's"} partnerLabel={room.role === 'host' ? "Your lovebug's" : 'Your'} />
-      {room.role === 'host' && <div className="live-timer"><span>Countdown per photo</span><div role="group" aria-label="Choose countdown seconds">{[3,5,10].map(value => <button key={value} className={shotTimer === value ? 'active' : ''} aria-pressed={shotTimer === value} disabled={shooting} onClick={() => setShotTimer(value)}>{value}s</button>)}</div></div>}
-      <div className="live-shoot-row"><button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button><span>{room.role === 'guest' ? 'Your partner starts the countdown.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span></div>
-      {shotCount > 0 && <div className="live-shot-progress" aria-label={`${shotCount} of 4 photos captured`}>{[0,1,2,3].map(index => <span key={index} className={index < shotCount ? 'done' : ''}>{index < shotCount ? '\u2665' : index + 1}</span>)}</div>}
-      {shots.length === 4 && <div className="live-finished"><div className="live-finished-preview">{shots.map((item,index) => <img key={index} src={item} alt={`Combined live picture ${index + 1}`} />)}</div><button className="pink-button" onClick={finishPhotos}>decorate our photos &#8599;</button></div>}
-      {notice && <p role="alert" className="error-note">{notice}</p>}
-      <small>Camera video streams directly between browsers using WebRTC. Supabase only relays connection messages and the countdown. Some networks need a TURN relay; if it fails, switch to Photo Letters.</small></div>
     </>}
     {!room && notice && <p role="alert" className="error-note">{notice}</p>}
   </section>;

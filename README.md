@@ -79,6 +79,10 @@ Use a static host that provides HTTPS, such as Cloudflare Pages. Connect your Gi
 
 Visit the generated HTTPS URL on her phone. The app is mobile-responsive. Live Together also needs your publishable Supabase variables configured for the Pages deployment. For a shared cloud album, complete the separate Auth/Storage integration later; until then, use **Download Strip** and share the PNG yourself.
 
+### Together Apart adjustment panel (v0.2.2)
+
+The big combined photo stays at the same size. Wide desktop screens show photo controls in a scrollable inspector beside it; phones and smaller screens offer an **adjust our photo** button that opens a bottom drawer with a miniature live composition. The shutter button is beside the photo rather than below all settings. See [Together Apart setup](docs/TOGETHER_APART_SETUP.md#v022-adjustments-while-viewing-the-photo).
+
 ### Supabase project
 
 The original solo booth and Photo Letters work without Supabase. **Live Together requires only Supabase Realtime** plus the Project URL and publishable key in `.env.local` (or your deployment environment variables). Do not commit that local file. Room links are unlisted, not authenticated; private albums with verified membership and Storage policies will come later. [Full setup guide](docs/TOGETHER_APART_SETUP.md).
