@@ -103,3 +103,7 @@ When deployed, test:
 3. On Android/iPhone widths around 360-430px, tap **adjust our photo**. The main picture must keep its original width and remain visible above the bottom drawer. Adjust layout, crop, border, and mirror. The miniature preview must update along with the main frame.
 4. Close and reopen the drawer, then use the capture button near the picture. The drawer must close for the countdown. After four photos, use **decorate our photos** to enter the existing editor.
 5. Confirm Photo Letters, the solo booth, and sticker tools are unchanged.
+
+## v0.3 virtual backgrounds
+
+See [SHARED_VIRTUAL_BACKGROUNDS.md](SHARED_VIRTUAL_BACKGROUNDS.md). This adds optional lazy-loaded person segmentation and four local illustrated scenes without changing Supabase configuration. Original cameras remains the default and works if the model is blocked or slow. Both phones must refresh after deploying the update.

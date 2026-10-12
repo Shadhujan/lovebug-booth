@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { SCENES, type TogetherComposition, type TogetherLayout, type SceneKey } from '../lib/togetherPhotos';
+import { BACKDROPS, SCENES, type TogetherComposition, type TogetherLayout, type SceneKey, type BackdropKey } from '../lib/togetherPhotos';
 
 type Props = {
   value: TogetherComposition;
@@ -26,7 +26,20 @@ export default function TogetherCompositionControls({
         <strong>{option.title}</strong><small>{option.detail}</small>
       </button>)}
     </div>
-    <div><h4>Our little backdrop</h4><p>Choose the scrapbook border around your shared photo.</p></div>
+    <div><h4>Our shared little world ♡</h4><p>Choose Original cameras for the familiar soft blend, or stand together in a virtual scene. Virtual backgrounds cut both people out on each device.</p></div>
+    <div className="together-backdrop-options" role="group" aria-label="Our shared background">
+      {(Object.entries(BACKDROPS) as [BackdropKey, typeof BACKDROPS[BackdropKey]][]).map(([id, option]) => <button
+        key={id} type="button" aria-pressed={value.backdrop === id} className={value.backdrop === id ? 'active' : ''}
+        disabled={disabled} onClick={() => change({ backdrop: id })}>
+        <span className="together-backdrop-image" style={{ backgroundColor: option.tint, backgroundImage: option.asset ? `url(${option.asset})` : undefined }} aria-hidden="true">{id === 'original' ? '♡ + ♡' : null}</span>
+        <strong>{option.name}</strong><small>{option.description}</small>
+      </button>)}
+    </div>
+    {value.backdrop !== 'original' && <div className="together-scale-grid" aria-label="Person cutout sizes">
+      <label><span>{mineLabel} size <output>{value.scaleHost}%</output></span><input type="range" min="70" max="140" step="5" value={value.scaleHost} onChange={event => change({ scaleHost: Number(event.target.value) })} disabled={disabled} /></label>
+      <label><span>{partnerLabel} size <output>{value.scaleGuest}%</output></span><input type="range" min="70" max="140" step="5" value={value.scaleGuest} onChange={event => change({ scaleGuest: Number(event.target.value) })} disabled={disabled} /></label>
+    </div>}
+    <div><h4>Our photo-strip border</h4><p>Keep the scrapbook frame you already love.</p></div>
     <div className="scene-options" role="group" aria-label="Choose shared scrapbook border">
       {(Object.entries(SCENES) as [SceneKey, typeof SCENES[SceneKey]][]).map(([id, item]) => <button key={id} type="button" className={value.scene === id ? 'active' : ''} aria-pressed={value.scene === id} disabled={disabled} onClick={() => change({ scene: id })}><span className="scene-swatch" style={{ background: item.background }} />{item.name}</button>)}
     </div>
@@ -39,8 +52,8 @@ export default function TogetherCompositionControls({
       <label><span>Move {mineLabel.toLowerCase()} photo framing <output>{value.focusHost}%</output></span><input type="range" min="0" max="100" step="5" value={value.focusHost} disabled={disabled} onChange={event => change({ focusHost: Number(event.target.value) })} /></label>
       <label><span>Move {partnerLabel.toLowerCase()} photo framing <output>{value.focusGuest}%</output></span><input type="range" min="0" max="100" step="5" value={value.focusGuest} disabled={disabled} onChange={event => change({ focusGuest: Number(event.target.value) })} /></label>
     </div>
-    <p className="together-slider-tip">Slide left or right until both faces sit comfortably in the shared frame. Keep faces out of the middle fade for the cleanest result.</p>
+    <p className="together-slider-tip">{value.backdrop === 'original' ? 'Slide each camera crop until both faces fit. Keep faces away from the center fade.' : 'Move each person left or right in your shared world. Adjust size just above if you need more space.'}</p>
     {disabled && <p className="together-readonly">Your lovebug is choosing the shared framing. You see the same finished composition on your screen.</p>}
-    <p className="together-help-note">A soft blend hides a hard seam, but does not erase either room. Very different backgrounds may still show until the live person-cutout feature is ready.</p>
+    <p className="together-help-note">{value.backdrop === 'original' ? 'The original soft blend works even without the background remover.' : 'Virtual scenes load an optional on-device cutout model. Use Original cameras if the phone gets warm or the cutout edges look rough.'}</p>
   </div>;
 }

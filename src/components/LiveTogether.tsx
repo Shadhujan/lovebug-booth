@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherComposition } from '../lib/togetherPhotos';
+import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
 import TogetherCompositionControls from './TogetherCompositionControls';
 
 const URL_PATTERN = /^[a-f0-9]{32}$/;
@@ -12,11 +12,12 @@ type Presence = { id: string; role: 'host' | 'guest' };
 type Message = {
   from: string;
   to?: string;
-  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot';
+  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   composition?: TogetherComposition;
   seconds?: number;
+  ready?: boolean;
 };
 type Props = { timer: number; onCompleted: (photos: string[]) => void };
 
@@ -42,7 +43,7 @@ function roomLink(id: string): string {
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<Message>;
-  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot'].includes(data.kind ?? '');
+  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready'].includes(data.kind ?? '');
 }
 
 export default function LiveTogether({ timer, onCompleted }: Props) {
@@ -63,6 +64,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [shots, setShots] = useState<string[]>([]);
   const [shooting, setShooting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cutoutStatus, setCutoutStatus] = useState<'off' | 'loading' | 'ready' | 'error'>('off');
+  const [peerCutoutReady, setPeerCutoutReady] = useState(false);
+  const virtualEnabled = composition.backdrop !== 'original';
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const compactPreviewRef = useRef<HTMLCanvasElement>(null);
   const previewFrameRef = useRef<HTMLDivElement>(null);
@@ -72,6 +76,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cutoutsRef = useRef<Partial<TogetherCutouts>>({});
+  const cutoutsReadyRef = useRef(false);
+  const peerCutoutReadyRef = useRef(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const otherIdRef = useRef<string | null>(null);
@@ -98,6 +105,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     if (!localVideoRef.current?.videoWidth || !remoteVideoRef.current?.videoWidth || !connectedRef.current) {
       setNotice('Wait until both camera feeds are connected.'); return;
     }
+    if (selected.backdrop !== 'original' && (!cutoutsReadyRef.current || !peerCutoutReadyRef.current)) {
+      setNotice('Wait until both person cutouts are ready, or switch to Original cameras.');
+      return;
+    }
     shootingRef.current = true;
     setSettingsOpen(false); // Leave the entire photo visible during the countdown.
     const operation = operationRef.current;
@@ -116,7 +127,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         const theirs = remoteVideoRef.current;
         if (!mine || !theirs) throw new Error('A camera disconnected during the countdown.');
         // Host/guest source ordering is identical on both devices, including mirrors.
-        made.push(captureLivePair(mine, theirs, selected, room?.role ?? 'host'));
+        made.push(captureLivePair(mine, theirs, selected, room?.role ?? 'host',
+          selected.backdrop !== 'original' && cutoutsReadyRef.current
+            ? cutoutsRef.current as TogetherCutouts : undefined));
         setShotCount(made.length); setCount(null);
         await sleep(450);
       }
@@ -137,6 +150,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     connectedRef.current = false;
     setLocalReady(false); setRemoteReady(false); setConnected(false);
     setPeerPresent(false); setShots([]); setShotCount(0); setNotice('');
+    setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
     setStatus('Asking to use your camera...');
     const clientId = clientIdRef.current;
 
@@ -153,6 +167,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
       queuedIceRef.current = [];
       otherIdRef.current = null; offeredRef.current = false;
+      setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
       if (active) { connectedRef.current = false; setRemoteReady(false); setConnected(false); }
     }
 
@@ -193,6 +208,12 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (!active || !isMessage(raw)) return;
       if (raw.from === clientId || (raw.to && raw.to !== clientId)) return;
       if (otherIdRef.current && otherIdRef.current !== raw.from) return;
+      if (raw.kind === 'cutout-ready') {
+        const ready = raw.ready === true;
+        peerCutoutReadyRef.current = ready;
+        setPeerCutoutReady(ready);
+        return;
+      }
       if (raw.kind === 'scene') {
         if (joinedRoom.role === 'guest' && isTogetherComposition(raw.composition)) { setComposition(raw.composition); compositionRef.current = raw.composition; }
         return;
@@ -341,6 +362,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setRoom(null); setCopied(false); setNotice(''); setStatus('Create a room or open an invite.');
     setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
     setSettingsOpen(false);
+    cutoutsRef.current = {}; cutoutsReadyRef.current = false;
+    peerCutoutReadyRef.current = false; setPeerCutoutReady(false); setCutoutStatus('off');
   }
 
   async function copyLink() {
@@ -353,6 +376,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     if (room?.role !== 'host' || shootingRef.current) return;
     setComposition(value);
     compositionRef.current = value;
+    if (value.backdrop === 'original') {
+      peerCutoutReadyRef.current = false; setPeerCutoutReady(false);
+    }
     send({ kind: 'scene', composition: value });
   }
 
@@ -388,6 +414,73 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     void runSequenceRef.current(selected, shotTimer);
   }
 
+  // Load the optional selfie model only while a shared virtual world is in
+  // use. Both browsers segment both WebRTC feeds locally; no image is sent to
+  // Supabase. Running at ~4 cutouts/sec per person keeps Android usable.
+  useEffect(() => {
+    let active = true;
+    let frame = 0;
+    let processor: import('../lib/personCutout').PersonCutoutProcessor | null = null;
+    cutoutsRef.current = {};
+    cutoutsReadyRef.current = false;
+    setCutoutStatus(virtualEnabled ? 'loading' : 'off');
+    if (!virtualEnabled || !room || !connected || !localReady || !remoteReady) {
+      if (room) send({ kind: 'cutout-ready', ready: false });
+      return () => { active = false; };
+    }
+    send({ kind: 'cutout-ready', ready: false });
+    let lastRun = 0;
+    let step = 0;
+    void import('../lib/personCutout').then(({ PersonCutoutProcessor }) => PersonCutoutProcessor.create('VIDEO')).then(loaded => {
+      if (!active) { loaded.close(); return; }
+      processor = loaded;
+      const run = (time: number) => {
+        if (!active || !processor) return;
+        frame = requestAnimationFrame(run);
+        if (time - lastRun < 115) return;
+        lastRun = time;
+        const mine = localVideoRef.current;
+        const theirs = remoteVideoRef.current;
+        if (!mine?.videoWidth || !theirs?.videoWidth) return;
+        const video = step++ % 2 === 0 ? mine : theirs;
+        const role = video === mine ? (room.role === 'host' ? 'host' : 'guest') : (room.role === 'host' ? 'guest' : 'host');
+        try {
+          const previous = cutoutsRef.current[role]?.image;
+          const output = previous instanceof HTMLCanvasElement ? previous : undefined;
+          cutoutsRef.current[role] = processor.cutout(video, video.videoWidth, video.videoHeight, output);
+          if (!cutoutsReadyRef.current && cutoutsRef.current.host && cutoutsRef.current.guest) {
+            cutoutsReadyRef.current = true;
+            setCutoutStatus('ready');
+            send({ kind: 'cutout-ready', ready: true });
+          }
+        } catch (reason) {
+          cancelAnimationFrame(frame);
+          setCutoutStatus('error');
+          cutoutsReadyRef.current = false;
+          cutoutsRef.current = {};
+          send({ kind: 'cutout-ready', ready: false });
+          setNotice(reason instanceof Error ? `Background removal failed: ${reason.message}. Choose Original cameras.` : 'Background removal is not available. Choose Original cameras.');
+        }
+      };
+      frame = requestAnimationFrame(run);
+    }).catch(() => {
+      if (active) {
+        setCutoutStatus('error');
+        setNotice('Could not download the optional person-cutout model. Switch to Original cameras to keep taking photos.');
+        send({ kind: 'cutout-ready', ready: false });
+      }
+    });
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+      processor?.close();
+      cutoutsRef.current = {};
+      cutoutsReadyRef.current = false;
+    };
+    // This effect changes only when entering/leaving virtual mode, not when
+    // selecting a different scene or tweaking the sliders.
+  }, [room, connected, localReady, remoteReady, virtualEnabled]);
+
   // Preview and JPEG export use the same drawing function, crop and orientation.
   // Render at 15 fps to avoid needless phone battery drain. Canvas is decorative
   // only; it never uploads video frames or camera images.
@@ -409,7 +502,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
             drawTogetherFrame(canvas,
               room.role === 'host' ? localSource : remoteSource,
               room.role === 'guest' ? localSource : remoteSource,
-              compositionRef.current, scratch);
+              compositionRef.current, scratch,
+              cutoutsReadyRef.current ? cutoutsRef.current as TogetherCutouts : undefined);
             // The mobile inspector displays a live, reduced-resolution copy
             // of the *same* composited frame. No second cropping algorithm.
             if (settingsOpenRef.current && compactPreviewRef.current) {
@@ -446,9 +540,14 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
             {showGuides && connected && remoteReady && <div className="live-stage-guides" aria-hidden="true"><span>your shared photo</span></div>}
             {count !== null && <div className="live-count-overlay" aria-label={`Taking photo in ${count}`}>{count}</div>}
           </div>
+          {virtualEnabled && <p className="together-cutout-status" role="status" data-state={cutoutStatus}>
+            {cutoutStatus === 'ready' ? peerCutoutReady ? '♡ Both cutouts are ready. You share one little world.' : 'Your cutouts are ready. Waiting for your lovebug’s phone…'
+              : cutoutStatus === 'error' ? 'Background remover unavailable. Open Adjust our photo and choose Original cameras.'
+              : 'Preparing your shared world… each phone is cutting out both people locally.'}
+          </p>}
           <div className="live-shoot-row live-preview-shoot">
-            <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
-            <span>{room.role === 'guest' ? 'Your partner starts the countdown.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span>
+            <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting || (virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady))} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
+            <span>{room.role === 'guest' ? 'Your partner starts the countdown.' : virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady) ? 'Preparing the shared scene on both devices.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span>
           </div>
           <div className="live-mini-cameras"><div className="live-mini-camera"><div className="live-camera-label">your camera <span>{localReady ? 'on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className={mirrorSelfView ? 'live-local-video' : ''} aria-label="Your private selfie preview" />{!localReady && <span className="live-video-placeholder">waking up...</span>}</div></div><div className="live-mini-camera"><div className="live-camera-label">your lovebug <span>{connected && remoteReady ? 'here with you' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera thumbnail" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting...</span>}</div></div></div>
           <label className="together-toggle selfie-flip"><input type="checkbox" checked={mirrorSelfView} onChange={(event: ChangeEvent<HTMLInputElement>) => setMirrorSelfView(event.target.checked)} /> Mirror my little selfie tile (only my tile, not the saved photo)</label>

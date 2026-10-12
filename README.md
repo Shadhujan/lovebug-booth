@@ -20,6 +20,12 @@ npm run dev
 
 Open `http://localhost:5173` on your laptop. **Try the illustrated demo first** to test the editor without granting camera permission.
 
+### Together Apart v0.3 (shared virtual worlds)
+
+**New:** choose a Flower garden, Little café, Sunset beach, or Moonlight rooftop. A lazy-loaded MediaPipe selfie segmenter cuts *both* people from the original camera feeds and places them into one shared scene on the device. The existing full-size preview is preserved. Both phones wait for cutout readiness before live capture; Photo Letters can use the same scenes offline from your partner. Original cameras is always available as a reliable fallback. **See [Shared virtual backgrounds](docs/SHARED_VIRTUAL_BACKGROUNDS.md) for setup, privacy limits, and phone tests.**
+
+Add the vision package after applying the patch with `npm install` and commit the updated `package-lock.json` before pushing to production.
+
 ### Together Apart v0.2.1 (framing update)
 
 Two ways to make pictures together while far away:

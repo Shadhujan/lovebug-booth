@@ -1,6 +1,22 @@
 import { loadImage } from './photos';
 
 export type SceneKey = 'blush' | 'butter' | 'lavender' | 'mint';
+export type BackdropKey = 'original' | 'garden' | 'cafe' | 'beach' | 'moon';
+export const BACKDROPS: Record<BackdropKey, { name: string; description: string; asset?: string; tint: string }> = {
+  original: { name: 'Original cameras', description: 'Keep both real rooms', tint: '#f6d5e2' },
+  garden: { name: 'Flower garden', description: 'A date among the flowers', asset: '/backgrounds/garden.svg', tint: '#d9f1e2' },
+  cafe: { name: 'Little café', description: 'One cozy table for two', asset: '/backgrounds/cafe.svg', tint: '#f4dacd' },
+  beach: { name: 'Sunset beach', description: 'Same sunset, two hearts', asset: '/backgrounds/beach.svg', tint: '#ffe6c5' },
+  moon: { name: 'Moonlight rooftop', description: 'Our own starry night', asset: '/backgrounds/moon.svg', tint: '#d5d5ef' },
+};
+const backdropImages = new Map<BackdropKey, HTMLImageElement>();
+export function preloadBackdrop(key: BackdropKey): void {
+  if (key === 'original' || backdropImages.has(key)) return;
+  const image = new Image();
+  image.src = BACKDROPS[key].asset!;
+  backdropImages.set(key, image);
+}
+
 
 export const SCENES: Record<SceneKey, { name: string; background: string; accent: string }> = {
   blush: { name: 'Strawberry picnic', background: '#f7d6e0', accent: '#b75b7d' },
@@ -68,6 +84,9 @@ export async function readPhotoLetter(file: File): Promise<PhotoLetter> {
 export type TogetherLayout = 'close' | 'balanced' | 'classic';
 export type TogetherComposition = {
   scene: SceneKey;
+  backdrop: BackdropKey;
+  scaleHost: number;
+  scaleGuest: number;
   swap: boolean;
   layout: TogetherLayout;
   mirrorHost: boolean;
@@ -79,7 +98,7 @@ export type TogetherComposition = {
 export const TOGETHER_WIDTH = 1100;
 export const TOGETHER_HEIGHT = 825;
 export const DEFAULT_COMPOSITION: TogetherComposition = {
-  scene: 'blush', swap: false, layout: 'close',
+  scene: 'blush', backdrop: 'original', scaleHost: 100, scaleGuest: 100, swap: false, layout: 'close',
   mirrorHost: false, mirrorGuest: false,
   focusHost: 50, focusGuest: 50,
 };
@@ -88,6 +107,9 @@ export function isTogetherComposition(value: unknown): value is TogetherComposit
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<TogetherComposition>;
   return typeof item.scene === 'string' && Object.prototype.hasOwnProperty.call(SCENES, item.scene)
+    && typeof item.backdrop === 'string' && Object.prototype.hasOwnProperty.call(BACKDROPS, item.backdrop)
+    && Number.isFinite(item.scaleHost) && item.scaleHost! >= 70 && item.scaleHost! <= 140
+    && Number.isFinite(item.scaleGuest) && item.scaleGuest! >= 70 && item.scaleGuest! <= 140
     && (item.layout === 'close' || item.layout === 'balanced' || item.layout === 'classic')
     && typeof item.swap === 'boolean'
     && typeof item.mirrorHost === 'boolean' && typeof item.mirrorGuest === 'boolean'
@@ -96,6 +118,51 @@ export function isTogetherComposition(value: unknown): value is TogetherComposit
 }
 
 export type TogetherSource = { image: CanvasImageSource; width: number; height: number };
+export type TogetherCutouts = { host: TogetherSource; guest: TogetherSource };
+
+type PhotoArea = { x: number; y: number; w: number; h: number };
+function drawVirtualBackground(ctx: CanvasRenderingContext2D, backdrop: BackdropKey, photo: PhotoArea): void {
+  const chosen = BACKDROPS[backdrop];
+  preloadBackdrop(backdrop);
+  ctx.fillStyle = chosen.tint;
+  ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
+  const image = backdropImages.get(backdrop);
+  if (image?.complete && image.naturalWidth) {
+    ctx.drawImage(image, photo.x, photo.y, photo.w, photo.h);
+  }
+}
+
+function placePerson(ctx: CanvasRenderingContext2D, subject: TogetherSource, photo: PhotoArea,
+  center: number, focus: number, scale: number, mirror: boolean): void {
+  const height = photo.h * 1.02 * scale / 100;
+  const width = height * subject.width / subject.height;
+  const x = photo.x + photo.w * (center + (focus - 50) * 0.004) - width / 2;
+  const y = photo.y + photo.h - height + 15;
+  ctx.save();
+  if (mirror) {
+    ctx.translate(x * 2 + width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(subject.image, x, y, width, height);
+  ctx.restore();
+}
+
+function drawVirtualScene(ctx: CanvasRenderingContext2D, composition: TogetherComposition,
+  photo: PhotoArea, cutouts: TogetherCutouts): void {
+  drawVirtualBackground(ctx, composition.backdrop, photo);
+  const left = composition.swap ? cutouts.guest : cutouts.host;
+  const right = composition.swap ? cutouts.host : cutouts.guest;
+  const scaleLeft = composition.swap ? composition.scaleGuest : composition.scaleHost;
+  const scaleRight = composition.swap ? composition.scaleHost : composition.scaleGuest;
+  const mirrorLeft = composition.swap ? composition.mirrorGuest : composition.mirrorHost;
+  const mirrorRight = composition.swap ? composition.mirrorHost : composition.mirrorGuest;
+  const focusLeft = composition.swap ? composition.focusGuest : composition.focusHost;
+  const focusRight = composition.swap ? composition.focusHost : composition.focusGuest;
+  const center = composition.layout === 'close' ? 0.39 : composition.layout === 'balanced' ? 0.32 : 0.26;
+  placePerson(ctx, left, photo, center, focusLeft, scaleLeft, mirrorLeft);
+  placePerson(ctx, right, photo, 1 - center, focusRight, scaleRight, mirrorRight);
+}
+
 
 function scrapbookBackground(ctx: CanvasRenderingContext2D, scene: SceneKey): void {
   const theme = SCENES[scene];
@@ -138,8 +205,8 @@ function coverWithFocus(
  * Draw the single finished booth frame. The video previews are not separately
  * object-fit cropped; the actual result of this renderer is shown on screen.
  *
- * Soft/close mode feathers the whole pictures, not people-only cutouts. A
- * different room or lighting can still be noticeable until segmentation ships.
+ * Original mode softly merges real rooms; virtual mode composites two
+ * transparent subject cutouts over the same illustrated background.
  */
 export function drawTogetherFrame(
   canvas: HTMLCanvasElement,
@@ -147,6 +214,7 @@ export function drawTogetherFrame(
   guest: TogetherSource,
   composition: TogetherComposition,
   scratch?: HTMLCanvasElement,
+  cutouts?: TogetherCutouts,
 ): void {
   if (!host.width || !host.height || !guest.width || !guest.height) {
     throw new Error('Wait for both camera feeds before capturing.');
@@ -173,6 +241,9 @@ export function drawTogetherFrame(
   ctx.fillStyle = '#f8e9ee';
   ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
 
+  if (composition.backdrop !== 'original' && cutouts) {
+    drawVirtualScene(ctx, composition, photo, cutouts);
+  } else {
   // A single photo rectangle: no internal white frame, black gap or visible gutter.
   const overlap = composition.layout === 'close' ? 76 : composition.layout === 'balanced' ? 30 : 0;
   const sideWidth = (photo.w + overlap) / 2;
@@ -202,6 +273,7 @@ export function drawTogetherFrame(
     ctx.drawImage(layer, 0, 0, TOGETHER_WIDTH, TOGETHER_HEIGHT);
   }
 
+  }
   // A gentle matching grade across the entire image reduces lighting differences.
   ctx.fillStyle = 'rgba(255,236,239,0.08)';
   ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
@@ -228,13 +300,14 @@ export function captureLivePair(
   remote: HTMLVideoElement,
   composition: TogetherComposition,
   role: 'host' | 'guest',
+  cutouts?: TogetherCutouts,
 ): string {
   const canvas = document.createElement('canvas');
   canvas.width = TOGETHER_WIDTH;
   canvas.height = TOGETHER_HEIGHT;
   const mine = { image: local, width: local.videoWidth, height: local.videoHeight };
   const theirs = { image: remote, width: remote.videoWidth, height: remote.videoHeight };
-  drawTogetherFrame(canvas, role === 'host' ? mine : theirs, role === 'guest' ? mine : theirs, composition);
+  drawTogetherFrame(canvas, role === 'host' ? mine : theirs, role === 'guest' ? mine : theirs, composition, undefined, cutouts);
   return canvas.toDataURL('image/jpeg', 0.90);
 }
 
@@ -245,15 +318,27 @@ export async function composePhotoLetters(
 ): Promise<string[]> {
   if (!completePhotoSet(yours) || !completePhotoSet(partner)) throw new Error('Both photo letters need four pictures.');
   const pairs = await Promise.all(yours.map(async (photo, index) => [await loadImage(photo), await loadImage(partner[index])] as const));
-  return pairs.map(([mine, theirs]) => {
+  const processor = composition.backdrop === 'original' ? null
+    : await (await import('./personCutout')).PersonCutoutProcessor.create('IMAGE');
+  try {
+    const combined: string[] = [];
+    for (const [mine, theirs] of pairs) {
     const canvas = document.createElement('canvas');
     canvas.width = TOGETHER_WIDTH;
     canvas.height = TOGETHER_HEIGHT;
+    const cutouts: TogetherCutouts | undefined = processor ? {
+      host: processor.cutout(mine, mine.naturalWidth, mine.naturalHeight),
+      guest: processor.cutout(theirs, theirs.naturalWidth, theirs.naturalHeight),
+    } : undefined;
     drawTogetherFrame(canvas,
       { image: mine, width: mine.naturalWidth, height: mine.naturalHeight },
       { image: theirs, width: theirs.naturalWidth, height: theirs.naturalHeight },
-      composition,
+      composition, undefined, cutouts,
     );
-    return canvas.toDataURL('image/jpeg', 0.90);
-  });
+    combined.push(canvas.toDataURL('image/jpeg', 0.90));
+    // Let the browser update its loading state on slower Android devices.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
+    return combined;
+  } finally { processor?.close(); }
 }

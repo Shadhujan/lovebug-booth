@@ -25,8 +25,11 @@ The UI concept is approved. Keep all work mobile-first and verify behavior on a 
 - [x] v0.2.1: Photo Letters uses the same composition options and preview.
 - [x] Camera track cleanup on leave, public-link risk warnings, network failure fallback.
 - [ ] User-side: configure publishable Supabase values, install dependencies, run TypeScript/build, and test two different networks and Android phones over HTTPS.
-- [ ] Real-time on-device subject segmentation, cutout placement and a true common replacement background (next milestone; not bundled in v0.2).
+- [x] v0.3: optional live, on-device person segmentation, move/resize people and illustrated shared virtual backgrounds, with original-camera fallback.
+- [x] v0.3: Photo Letters also support both people in a shared virtual scene.
+- [ ] User-side: two-device Android/WebRTC testing of the cutout model, battery usage, edge quality and saved photo results.
 - [ ] Production TURN relay and stronger connection recovery where needed.
+- [ ] Signed-in private room membership and Realtime authorization policies (public invite link is not secure).
 
 ## Phase C - Shared private album with Supabase (later)
 

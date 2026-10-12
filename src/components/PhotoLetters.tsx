@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { compressPhoto, loadImage } from '../lib/photos';
-import { completePhotoSet, composePhotoLetters, DEFAULT_COMPOSITION, downloadPhotoLetter, drawTogetherFrame, readPhotoLetter, type TogetherComposition } from '../lib/togetherPhotos';
+import { completePhotoSet, composePhotoLetters, DEFAULT_COMPOSITION, downloadPhotoLetter, drawTogetherFrame, readPhotoLetter, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
 import TogetherCompositionControls from './TogetherCompositionControls';
 
 type Props = {
@@ -19,6 +19,9 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
   const [composition, setComposition] = useState<TogetherComposition>(DEFAULT_COMPOSITION);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const [firstPair, setFirstPair] = useState<[HTMLImageElement, HTMLImageElement] | null>(null);
+  const [previewCutouts, setPreviewCutouts] = useState<TogetherCutouts | null>(null);
+  const [cutoutStatus, setCutoutStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const virtualEnabled = composition.backdrop !== 'original';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const mineDone = completePhotoSet(mine);
@@ -36,14 +39,33 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
   }, [mine[0], partner[0]]);
 
   useEffect(() => {
+    let active = true;
+    setPreviewCutouts(null);
+    setCutoutStatus(firstPair && virtualEnabled ? 'loading' : 'idle');
+    if (firstPair && virtualEnabled) {
+      let processor: import('../lib/personCutout').PersonCutoutProcessor | null = null;
+      void import('../lib/personCutout').then(({ PersonCutoutProcessor }) => PersonCutoutProcessor.create('IMAGE')).then(loaded => {
+        processor = loaded;
+        if (!active) return;
+        const [mine, theirs] = firstPair;
+        const host = loaded.cutout(mine, mine.naturalWidth, mine.naturalHeight);
+        const guest = loaded.cutout(theirs, theirs.naturalWidth, theirs.naturalHeight);
+        if (active) { setPreviewCutouts({ host, guest }); setCutoutStatus('ready'); }
+      }).catch(() => { if (active) { setCutoutStatus('error'); setError('The background remover could not load. Choose Original cameras, or try again online.'); } })
+        .finally(() => processor?.close());
+    }
+    return () => { active = false; };
+  }, [firstPair, virtualEnabled]);
+
+  useEffect(() => {
     if (!firstPair || !previewRef.current) return;
     const [yours, theirs] = firstPair;
     drawTogetherFrame(previewRef.current,
       { image: yours, width: yours.naturalWidth, height: yours.naturalHeight },
       { image: theirs, width: theirs.naturalWidth, height: theirs.naturalHeight },
-      composition,
+      composition, undefined, previewCutouts ?? undefined,
     );
-  }, [firstPair, composition]);
+  }, [firstPair, composition, previewCutouts]);
 
   async function uploadMine(files: FileList | null) {
     if (!files?.length) return;
@@ -96,11 +118,12 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
     </div>
     <div className="paper-card letter-combine"><div><span className="eyebrow">03 / ONE SWEET PHOTO STRIP</span><h3>Bring your pictures together</h3><p>Adjust the shared framing below. When the first pictures are ready, you can see exactly how they will look together before saving all four.</p></div>
       <TogetherCompositionControls value={composition} onChange={setComposition} />
+      {virtualEnabled && firstPair && <p className="together-cutout-status" role="status" data-state={cutoutStatus}>{cutoutStatus === 'ready' ? '♡ Your first two photo cutouts are ready.' : cutoutStatus === 'error' ? 'Person cutouts are not available; switch to Original cameras.' : 'Preparing the people-only preview locally…'}</p>}
       {firstPair && <div className="letter-merged-preview"><div><span className="eyebrow">PREVIEW / FIRST PHOTO</span><p>The other three will be framed in exactly the same way.</p></div><canvas ref={previewRef} width={660} height={495} role="img" aria-label="Preview of the first two photos blended into one shared frame" /></div>}
-      <button className="pink-button letter-combine-button" disabled={busy || !mineDone || !partnerDone} onClick={() => void combine()}>{busy ? 'making your memory...' : 'combine our four pictures'} <span className="button-icon">&#9825;</span></button>
+      <button className="pink-button letter-combine-button" disabled={busy || !mineDone || !partnerDone || (virtualEnabled && cutoutStatus !== 'ready')} onClick={() => void combine()}>{busy ? 'making your memory...' : 'combine our four pictures'} <span className="button-icon">&#9825;</span></button>
       {!mineDone || !partnerDone ? <small>Both sets of four photos are required before combining.</small> : null}
       {error && <p className="error-note" role="alert">{error}</p>}
-      <p className="together-help-note">Photo letters stay on your device unless you send them. This joins two pictures into one frame with a soft fade. Removing the original room backgrounds still needs person segmentation, planned for a later version.</p>
+      <p className="together-help-note">Photo letters stay on your device unless you send them. In a virtual scene, both sets are segmented on this device before the four photo strips are made. If that is slow, choose Original cameras for the familiar soft blend.</p>
     </div>
     <input ref={minePicker} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { void uploadMine(event.target.files); event.target.value = ''; }} aria-label="Upload your four photos" />
     <input ref={partnerImagesPicker} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { void uploadPartnerImages(event.target.files); event.target.value = ''; }} aria-label="Upload four pictures from your partner" />

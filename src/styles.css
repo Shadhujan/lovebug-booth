@@ -148,3 +148,25 @@
   .live-booth-workspace.live-adjusting{padding-bottom:65dvh}
 }
 @media(prefers-reduced-motion:reduce){.live-adjust-trigger{transition:none}}
+
+/* v0.3: extra shared worlds live inside the existing v0.2.2 inspector.
+   Photo canvas and camera preview dimensions are intentionally unchanged. */
+.together-backdrop-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.together-backdrop-options button{display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left;padding:7px 7px 10px;border:1px solid #efd1da;border-radius:14px;background:#fff9f9;color:#915e72;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease)}
+.together-backdrop-options button.active{border-color:#e17f9e;background:#ffeaf0;box-shadow:inset 0 0 0 1px #edabc3}
+.together-backdrop-options button:hover:not(:disabled){transform:translateY(-2px)}
+.together-backdrop-options button:focus-visible{outline:3px solid #bd5e85;outline-offset:2px}
+.together-backdrop-options button:disabled{cursor:default;opacity:.9}
+.together-backdrop-image{height:67px;width:100%;border-radius:9px;display:grid;place-items:center;background-position:center;background-size:cover;font-size:22px;color:#c36d88}
+.together-backdrop-options strong{font-size:12px;padding:0 3px}
+.together-backdrop-options small{font-size:10px;color:#a57c89;line-height:1.35;padding:0 3px}
+.together-scale-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.together-scale-grid label{display:grid;gap:8px;padding:12px 13px;background:#fff3f6;border-radius:12px;color:#92677b;font-size:12px;font-weight:700}
+.together-scale-grid label span{display:flex;justify-content:space-between;gap:8px}
+.together-scale-grid input{width:100%;accent-color:#dc7898}
+.together-scale-grid output{color:#c66986;font-variant-numeric:tabular-nums}
+.together-cutout-status{margin:3px auto 0;font-size:11px;line-height:1.55;color:#a56881;background:#fff1f6;border:1px solid #f3d6df;border-radius:12px;padding:8px 12px;width:min(100%,850px)}
+.together-cutout-status[data-state="ready"]{background:#eff7ef;border-color:#cbe6d1;color:#5b836d}
+.together-cutout-status[data-state="error"]{background:#fff2e3;border-color:#e9d2b3;color:#976849}
+@media(max-width:760px){.together-scale-grid{grid-template-columns:1fr}.together-backdrop-image{height:60px}}
+@media(prefers-reduced-motion:reduce){.together-backdrop-options button{transition:none}}
