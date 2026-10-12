@@ -436,18 +436,31 @@
 .shared-finish-notice span { flex:1;min-width:190px; }
 @media(prefers-reduced-motion:reduce) { .live-photo-choice-option.partner-invited { animation:none; } }
 
-.shared-status-toast {
-  position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:40;
-  display:flex;align-items:center;gap:11px;max-width:min(365px,calc(100vw - 32px));
-  background:#fff9fb;color:#894663;border:1px solid #e9aec3;
-  box-shadow:0 12px 32px #874a7140;border-radius:16px;padding:12px 13px;
-  animation:lovebug-toast-enter .3s ease-out both;
+/* v0.5.3: noticeable, fixed in-app room notices; no OS notification permissions. */
+.lovebug-room-notice {
+  position:fixed;z-index:60;top:calc(18px + env(safe-area-inset-top,0px));right:18px;
+  width:min(365px,calc(100vw - 32px));display:flex;align-items:flex-start;gap:11px;
+  padding:15px 15px 15px 13px;border-radius:18px;
+  border:2px solid #df7aa0;border-left:6px solid #cc4679;
+  background:#fff7fa;color:#7f3d58;
+  box-shadow:0 16px 42px #76405b4d,0 0 0 4px #f7c0d45c;
+  animation:lovebug-notice-arrive .34s cubic-bezier(.18,.9,.27,1.15) both;
 }
-.shared-status-toast>span {font-size:26px;color:#d25381;line-height:1}
-.shared-status-toast>div {display:grid;gap:3px;min-width:0;flex:1}
-.shared-status-toast strong {font-size:.82rem;line-height:1.4}
-.shared-status-toast small {font-size:.72rem;line-height:1.4;color:#a9738b}
-.shared-status-toast button {border:0;background:none;color:#9a5b78;cursor:pointer;font-size:1.35rem;min-width:32px;min-height:38px}
-.shared-status-toast button:focus-visible {outline:2px solid #c44f7f;outline-offset:2px;border-radius:6px}
-@keyframes lovebug-toast-enter {from {opacity:0;transform:translateY(12px)}to {opacity:1;transform:translateY(0)}}
-@media(prefers-reduced-motion:reduce) {.shared-status-toast {animation:none}}
+.lovebug-room-notice-urgent {border-color:#ca5280;border-left-color:#a62d61;background:#ffedf3;box-shadow:0 17px 45px #76405b59,0 0 0 4px #f49bb759}
+.lovebug-room-notice-icon {display:grid;place-items:center;flex:0 0 37px;width:37px;height:37px;border-radius:12px;background:#df6a93;color:#fff;font-size:23px;font-weight:bold;box-shadow:0 3px 0 #c75079}
+.lovebug-room-notice-content {min-width:0;flex:1}
+.lovebug-room-notice-content strong {display:block;font-size:.9rem;line-height:1.4;font-weight:900}
+.lovebug-room-notice-content p {font-size:.79rem;line-height:1.5;margin:5px 0 0;color:#86586b}
+.lovebug-room-notice-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.lovebug-room-notice-actions button {min-height:39px;padding:8px 13px;border-radius:20px;font-size:.79rem;font-weight:900;transition:transform .2s ease,background .2s ease}
+.lovebug-room-notice-actions button:hover:not(:disabled) {transform:translateY(-1px)}
+.lovebug-notice-primary {border:1px solid #ce4c7b;background:#ce4c7b;color:white}
+.lovebug-notice-secondary {border:1px solid #e9b7c8;background:#fff8fb;color:#914661}
+.lovebug-notice-close {flex:0 0 35px;width:35px;min-height:37px;border:0;border-radius:11px;background:#ffe5ef;color:#934867;font-size:22px;line-height:1}
+.lovebug-room-notice button:focus-visible {outline:3px solid #97436b;outline-offset:3px}
+@keyframes lovebug-notice-arrive {from {opacity:0;transform:translateY(-13px) scale(.96)}to {opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:600px) {
+  .lovebug-room-notice {top:auto;left:12px;right:12px;bottom:calc(15px + env(safe-area-inset-bottom,0px));width:auto;max-width:480px;margin-inline:auto}
+  @keyframes lovebug-notice-arrive {from {opacity:0;transform:translateY(17px) scale(.97)}to {opacity:1;transform:translateY(0) scale(1)}}
+}
+@media(prefers-reduced-motion:reduce) {.lovebug-room-notice {animation:none}.lovebug-room-notice-actions button {transition:none}}

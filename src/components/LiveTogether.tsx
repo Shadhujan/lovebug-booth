@@ -107,6 +107,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   const [partnerFinished, setPartnerFinished] = useState<boolean | null>(null);
   const [partnerResumed, setPartnerResumed] = useState(false);
   const [partnerToast, setPartnerToast] = useState<'finished' | 'editing' | null>(null);
+  const [choiceNoticeDismissed, setChoiceNoticeDismissed] = useState(false);
   const partnerFinishedRef = useRef(false);
   const livePreviewSendingRef = useRef(false);
   const incomingSequenceRef = useRef(0);
@@ -166,11 +167,8 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
 
   useEffect(() => { onPhotoStageChange?.(photoStage !== 'camera'); }, [photoStage, onPhotoStageChange]);
   useEffect(() => { if (photoStage !== 'shared') setPeerGesture(null); }, [photoStage]);
-  useEffect(() => {
-    if (!partnerToast) return;
-    const timer = window.setTimeout(() => setPartnerToast(null), 8_000);
-    return () => window.clearTimeout(timer);
-  }, [partnerToast]);
+  // An editing update remains visible until acknowledged (or replaced by
+  // the next event). Auto-dismissed notices were easy to miss during drawing.
   useEffect(() => () => {
     // Leaving the page ends the host's room. A guest already editing can
     // finish offline when the connection closes.
@@ -246,6 +244,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
       return;
     }
     setMineChoice(choice);
+    setChoiceNoticeDismissed(true);
     sendPhotoMessage({ kind: 'choice', choice });
     setPhotoNotice('');
     if (choice === 'solo') {
@@ -505,6 +504,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     hostPhotosRef.current = null;
     setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false);
     setMineChoice(null); setPartnerChoice(null); setPartnerFinished(null); setPartnerResumed(false); setPartnerToast(null);
+    setChoiceNoticeDismissed(false);
     partnerFinishedRef.current = false; setPeerGesture(null); setPhotoNotice('');
     sharedDraftRef.current = freshDraft(); individualDraftRef.current = freshDraft();
     seenOperationsRef.current.clear();
@@ -589,6 +589,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
             if (joinedRoom.role === 'host') setGuestCaptured(true);
           } else if (message.kind === 'choice') {
             setPartnerChoice(message.choice);
+            setChoiceNoticeDismissed(false);
           } else if (message.kind === 'finish-state') {
             if (message.state === 'finished') {
               partnerFinishedRef.current = true;
@@ -882,7 +883,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     setRoomPin(null); setPendingGuest(null); setRoomExpires(null); setEnteredPin('');
     setCopied(false); setNotice(message); setStatus('Create a room or open an invite.');
     setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
-    setPhotoStage('camera'); setMineChoice(null); setPartnerChoice(null); setReviewVersion(0);
+    setPhotoStage('camera'); setMineChoice(null); setPartnerChoice(null); setChoiceNoticeDismissed(false); setReviewVersion(0);
     setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false); photosQueuedRef.current = false;
     setPhotoNotice(''); setFinishedImage(''); setIncomingEdit([]);
     setPartnerFinished(null); setPartnerResumed(false); setPartnerToast(null); partnerFinishedRef.current = false; setPeerGesture(null);
@@ -1134,14 +1135,46 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     return () => window.cancelAnimationFrame(request);
   }, [room, connected, localReady, remoteReady, photoStage]);
 
+  // One floating notice at a time: a join request is the highest priority.
+  // All notices stay in view while the user scrolls or decorates a long strip.
+  const showJoinNotice = room?.role === 'host' && Boolean(pendingGuest);
+  const showChoiceNotice = !showJoinNotice && Boolean(room) && transportReady && photoStage === 'choice' && partnerChoice === 'shared'
+    && mineChoice !== 'shared' && !choiceNoticeDismissed;
+  const showEditingNotice = !showJoinNotice && !showChoiceNotice && Boolean(partnerToast)
+    && (photoStage === 'shared' || photoStage === 'shared-review'
+      || (photoStage === 'finished' && finishedFrom === 'shared'));
+
   return <section className="live-together" aria-label="Live remote photo booth">
-    {partnerToast && (photoStage === 'shared' || photoStage === 'shared-review' || (photoStage === 'finished' && finishedFrom === 'shared')) &&
-      <div className="shared-status-toast" role="status">
-        <span aria-hidden="true">{'\u2661'}</span>
-        <div><strong>{partnerToast === 'finished' ? 'Your lovebug finished a version' : 'Your lovebug is decorating again'}</strong>
-          <small>{partnerToast === 'finished' ? 'You can keep editing yours.' : 'Their changes will appear while connected.'}</small></div>
-        <button type="button" onClick={() => setPartnerToast(null)} aria-label="Dismiss editing notification">{'\u00d7'}</button>
-      </div>}
+    {showJoinNotice && <aside className="lovebug-room-notice lovebug-room-notice-urgent" role="alert" aria-label="Room join request">
+      <span className="lovebug-room-notice-icon" aria-hidden="true">♡</span>
+      <div className="lovebug-room-notice-content">
+        <strong>Someone wants to join your room!</strong>
+        <p>Only approve someone you recognize.</p>
+        <div className="lovebug-room-notice-actions">
+          <button type="button" className="lovebug-notice-primary" disabled={roomBusy} onClick={() => void decideGuest(true)}>Approve guest</button>
+          <button type="button" className="lovebug-notice-secondary" disabled={roomBusy} onClick={() => void decideGuest(false)}>Decline</button>
+        </div>
+      </div>
+    </aside>}
+    {showChoiceNotice && <aside className="lovebug-room-notice" role="status" aria-label="Partner chose to decorate together">
+      <span className="lovebug-room-notice-icon" aria-hidden="true">♡</span>
+      <div className="lovebug-room-notice-content">
+        <strong>Your lovebug wants to decorate together!</strong>
+        <p>You can choose to join them, or make your own version.</p>
+        <div className="lovebug-room-notice-actions">
+          <button type="button" className="lovebug-notice-primary" disabled={!transportReady || !hostPhotosReady} onClick={() => chooseEditing('shared')}>Decorate together</button>
+        </div>
+      </div>
+      <button type="button" className="lovebug-notice-close" onClick={() => setChoiceNoticeDismissed(true)} aria-label="Dismiss decorate together invitation">×</button>
+    </aside>}
+    {showEditingNotice && <aside className="lovebug-room-notice" role="status" aria-label="Shared editing update">
+      <span className="lovebug-room-notice-icon" aria-hidden="true">♡</span>
+      <div className="lovebug-room-notice-content">
+        <strong>{partnerToast === 'finished' ? 'Your lovebug finished a version!' : 'Your lovebug is decorating again!'}</strong>
+        <p>{partnerToast === 'finished' ? 'Your copy is safe. Keep editing or finish whenever you like.' : 'Their changes will appear here while you are connected.'}</p>
+      </div>
+      <button type="button" className="lovebug-notice-close" onClick={() => setPartnerToast(null)} aria-label="Dismiss editing notification">×</button>
+    </aside>}
     {photoStage !== 'camera' && <div className="live-post-capture">
       {photoStage === 'choice' && <section className="paper-card live-photo-choice" aria-label="Choose how to decorate">
         <div className="eyebrow">FOUR PICTURES / TWO LOVEBUGS</div>

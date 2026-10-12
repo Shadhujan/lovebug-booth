@@ -69,3 +69,21 @@ This is an incremental update on top of v0.5 secure Quick Rooms and Locked Rooms
 - [ ] With two shared editors open, slowly drag or rotate a sticker: the other phone sees intermediate positions at a modest rate, not only the final jump. Releasing commits the final position and Undo reverses it correctly.
 - [ ] Finish on one device while the other edits: show an in-app notification but let the second device finish whenever it wants. Returning to stickers from the finish screen clears the other device's finished indicator.
 - [ ] Repeat with a slow or disconnected connection: no blank strip, no lost local draft, no forced room exit. Disconnecting one participant during editing **must always leave the other able to finish locally**.
+
+## v0.5.3 — floating room notifications
+
+- The host sees a **persistent floating join request** from any scroll position. It includes Approve and Decline; only approve someone you recognize. The existing in-page request remains in place. The alert disappears only when the request is decided or the server removes it. No one is ever approved automatically.
+- When the other person asks to **Decorate together**, a floating invitation offers a direct opt-in action. The existing highlighted choice remains. Dismissing the invitation does not choose for you.
+- While decorating together, **finished** and **editing again** updates stay visible until dismissed or replaced by a newer update, rather than disappearing after eight seconds. Finishing is still an independent snapshot; nobody is forced out of their editor.
+- One fixed notice is displayed at a time (join approval before invitation before editing update). The notice moves to the lower edge on small screens, supports keyboard focus and reduced motion, and never requests OS notification permission. No photo or sticker traffic is added.
+- The existing **disconnect-and-finish-locally** path is unchanged and remains mandatory to test.
+
+### v0.5.3 acceptance checks
+
+- [ ] Host scrolls to the camera preview, guest asks to join: a floating approval notice appears without scrolling to the top. Verify approving a known guest and declining a separate request.
+- [ ] The guest cannot access the camera or room before the host explicitly approves; a third participant remains blocked.
+- [ ] After four photos, one person chooses Decorate together: the other sees a floating invitation, can accept it or dismiss it, and is never forced to join.
+- [ ] During shared editing, one person finishes: the other sees the fixed notice while busy with stickers. It stays until acknowledged; editing remains available.
+- [ ] If that person returns to stickers, the other receives an updated notice.
+- [ ] On a 320px/390px phone screen, the notice fits without horizontal overflow. At reduced motion it is still visible but does not animate.
+- [ ] **Disconnect one participant during editing and confirm the other can finish and download locally.**
