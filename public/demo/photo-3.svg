@@ -9,5 +9,5 @@
  <circle cx="55" cy="94" r="7" fill="#ed9eaa" opacity=".8"/><circle cx="91" cy="94" r="7" fill="#ed9eaa" opacity=".8"/><circle cx="132" cy="94" r="7" fill="#ed9eaa" opacity=".8"/><circle cx="166" cy="94" r="7" fill="#ed9eaa" opacity=".8"/>
  <path d="M44 105q25-13 55 0l24 30H26Z" fill="#516c63"/><path d="M118 105q34-16 61 0l19 31h-92Z" fill="#faf2db"/>
  <path d="M0 140q110-26 220 0" fill="#fff4ee"/>
- <text x="110" y="13" text-anchor="middle" font-family="Georgia" font-style="italic" font-size="10" fill="#985776">♡ hide & laugh ♡</text>
+ <text x="110" y="13" text-anchor="middle" font-family="Georgia" font-style="italic" font-size="10" fill="#985776">♡ hide &amp; laugh ♡</text>
  </svg>

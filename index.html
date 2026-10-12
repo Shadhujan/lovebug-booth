@@ -9,9 +9,105 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <style>
+      /* Inline, dependency-free first paint; shown before the React bundle arrives. */
+      #boot-splash { position:fixed; inset:0; z-index:100; display:grid; place-items:center;
+        overflow:hidden; padding:30px 18px; text-align:center; color:#724b5b;
+        background:radial-gradient(circle at 23% 25%,#ffe5e9 0,transparent 32%),
+                   radial-gradient(circle at 78% 75%,#fde8ef 0,transparent 37%),#fff9f6;
+        font-family:'Trebuchet MS','Avenir Next',system-ui,sans-serif;
+        transition:opacity .32s cubic-bezier(.32,.72,0,1),visibility 0s linear .32s; }
+      #boot-splash.boot-splash--leaving { opacity:0; visibility:hidden; pointer-events:none; }
+      #boot-splash::before { content:''; position:absolute; top:0; left:0; right:0; height:12px;
+        background:repeating-linear-gradient(100deg,#ee9bb0 0 19px,#fff0e4 19px 38px); }
+      .lb-boot-inner { position:relative; width:min(100%,390px); display:flex;
+        flex-direction:column; align-items:center; padding:18px 5px 26px; }
+      .lb-boot-eyebrow { font-size:10px; letter-spacing:2.6px; font-weight:800;
+        color:#c07b92; margin:12px 0 24px; }
+      .lb-boot-art { height:207px; width:240px; position:relative; display:grid; place-items:center; }
+      .lb-boot-strip { width:115px; padding:12px 10px 10px; transform:rotate(9deg);
+        background:#f4a9be; border:4px solid #fff8fa; border-radius:7px;
+        box-shadow:9px 13px 0 #ebc2cb,14px 19px 28px #d5a6b04f;
+        animation:lb-boot-bob 2.6s cubic-bezier(.45,0,.45,1) infinite alternate; }
+      .lb-boot-strip-title,.lb-boot-strip-foot { display:block; color:#fff;
+        text-transform:uppercase; letter-spacing:1.4px; font-weight:900; font-size:9px; }
+      .lb-boot-strip-title { margin-bottom:7px; }
+      .lb-boot-strip-foot { margin-top:6px; font-size:8px; }
+      .lb-boot-shot { background:#fff1e7; height:34px; margin-top:5px; border-radius:3px;
+        display:flex; align-items:center; justify-content:center; gap:7px; }
+      .lb-boot-shot:nth-of-type(2) { background:#f6e8fa; }
+      .lb-boot-shot:nth-of-type(3) { background:#ffefd4; }
+      .lb-boot-shot span { font-size:17px; line-height:1; }
+      .lb-boot-spark { position:absolute; color:#e7809b; font-size:26px;
+        animation:lb-boot-sparkle 2.1s cubic-bezier(.32,.72,0,1) infinite alternate; }
+      .lb-boot-spark.one { top:29px; left:27px; transform:rotate(-16deg); }
+      .lb-boot-spark.two { top:62px; right:13px; color:#d2a4d8; animation-delay:.65s; }
+      .lb-boot-spark.three { bottom:21px; left:15px; color:#e6b36c; animation-delay:1.2s; }
+      .lb-boot-brand { font-size:clamp(27px,7vw,34px); font-weight:900; letter-spacing:-1.5px;
+        color:#d86d8a; margin:2px 0 10px; }
+      .lb-boot-brand em { font-style:normal; color:#a85e75; }
+      .lb-boot-brand sup { vertical-align:super; font-size:13px; color:#d59aa5; }
+      .lb-boot-copy { font-size:14px; font-weight:600; color:#916c7c; margin:0 0 20px;
+        line-height:1.7; }
+      .lb-boot-dots { display:flex; gap:9px; justify-content:center; }
+      .lb-boot-dots span { width:8px; height:8px; border-radius:50%; background:#e8809d;
+        animation:lb-boot-dot 1s cubic-bezier(.3,.7,.1,1) infinite alternate; }
+      .lb-boot-dots span:nth-child(2) { animation-delay:.17s; background:#f4b1c2; }
+      .lb-boot-dots span:nth-child(3) { animation-delay:.34s; background:#ddb2d6; }
+      .lb-boot-note { font-family:Georgia,serif; font-style:italic; font-size:12px;
+        color:#b98299; margin-top:27px; }
+      .lb-boot-help { font-size:12px; margin:17px 0 0; color:#86606f; line-height:1.6; }
+      .lb-boot-help[hidden] { display:none; }
+      .lb-boot-help button { margin-left:3px; border:0; padding:4px 6px; background:transparent;
+        color:#b45478; text-decoration:underline; font:inherit; cursor:pointer; }
+      .lb-boot-help button:focus-visible { outline:3px solid #b45478; outline-offset:3px; border-radius:4px; }
+      @keyframes lb-boot-bob { from { transform:translateY(5px) rotate(6deg); }
+        to { transform:translateY(-7px) rotate(10deg); } }
+      @keyframes lb-boot-sparkle { from { opacity:.45; scale:.8; }
+        to { opacity:1; scale:1.15; } }
+      @keyframes lb-boot-dot { from { opacity:.35; transform:translateY(3px) scale(.8); }
+        to { opacity:1; transform:translateY(-3px) scale(1); } }
+      @media (prefers-reduced-motion:reduce) {
+        #boot-splash,.lb-boot-strip,.lb-boot-spark,.lb-boot-dots span { animation:none; transition:none; }
+      }
+    </style>
     <title>Lovebug Booth ♡ — our tiny photobooth</title>
   </head>
   <body>
+    <!-- Visible immediately, before any JavaScript framework or external asset loads. -->
+    <div id="boot-splash" role="status" aria-live="polite" aria-label="Preparing Lovebug Booth">
+      <div class="lb-boot-inner">
+        <span class="lb-boot-eyebrow">JUST A LITTLE MOMENT</span>
+        <div class="lb-boot-art" aria-hidden="true">
+          <span class="lb-boot-spark one">&#9825;</span>
+          <span class="lb-boot-spark two">&#10047;</span>
+          <span class="lb-boot-spark three">&#10022;</span>
+          <div class="lb-boot-strip">
+            <span class="lb-boot-strip-title">YOU + ME &#9825;</span>
+            <div class="lb-boot-shot"><span>&#128059;</span><span>&#9829;</span><span>&#128007;</span></div>
+            <div class="lb-boot-shot"><span>&#128007;</span><span>&#10024;</span><span>&#128059;</span></div>
+            <div class="lb-boot-shot"><span>&#128059;</span><span>&#9829;</span><span>&#128007;</span></div>
+            <span class="lb-boot-strip-foot">forever silly</span>
+          </div>
+        </div>
+        <div class="lb-boot-brand">lovebug <em>booth</em><sup>&#10047;</sup></div>
+        <p class="lb-boot-copy">getting our little booth ready... &#9825;</p>
+        <div class="lb-boot-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="lb-boot-note">our memories are worth the wait</div>
+        <p class="lb-boot-help" hidden>Taking longer than expected.
+          <button type="button" onclick="window.location.reload()">Try refreshing</button>
+        </p>
+      </div>
+    </div>
+    <script>
+      window.setTimeout(function () {
+        var splash = document.getElementById('boot-splash');
+        if (splash && !splash.classList.contains('boot-splash--leaving')) {
+          var help = splash.querySelector('.lb-boot-help');
+          if (help) help.hidden = false;
+        }
+      }, 12000);
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
