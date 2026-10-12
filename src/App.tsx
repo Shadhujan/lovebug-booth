@@ -13,7 +13,7 @@ import type { EditorDraft, PhotoFraming, Screen, ThemeKey } from './types';
 
 const SAMPLE_PHOTOS = [1,2,3,4].map(n => `/demo/photo-${n}.svg`);
 export default function App() {
-  const [screen, setScreen] = useState<Screen>(new URLSearchParams(window.location.search).has('together') ? 'together' : 'home');
+  const [screen, setScreen] = useState<Screen>(() => { const params = new URLSearchParams(window.location.search); return params.has('together') ? 'together' : params.has('album') ? 'album' : 'home'; });
   const [theme, setTheme] = useState<ThemeKey>('strawberry');
   const [timer, setTimer] = useState(3);
   const [photos, setPhotos] = useState<(string | null)[]>([null, null, null, null]);
@@ -25,6 +25,10 @@ export default function App() {
   const [letterPartner, setLetterPartner] = useState<(string | null)[]>([null, null, null, null]);
   const [combined, setCombined] = useState(false);
   useEffect(() => {
+    if (screen !== 'album') {
+      const location = new URL(window.location.href);
+      if (location.searchParams.has('album')) { location.searchParams.delete('album'); window.history.replaceState(null, '', location.pathname + location.search + location.hash); }
+    }
     if (screen !== 'together') {
       const url = new URL(window.location.href);
       if (url.searchParams.has('together')) { url.searchParams.delete('together'); window.history.replaceState(null, '', url.pathname + url.search + url.hash); }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CloudAlbum from './CloudAlbum';
 import { deleteStrip, downloadBlob, listStrips } from '../lib/storage';
 import type { AlbumEntry } from '../types';
 
@@ -27,7 +28,8 @@ export default function Album({ onHome, onNew }: Props) {
     catch { setError('Could not delete that strip.'); }
   };
   return <main className="inner-page page-width album-page"><button className="back-link" onClick={onHome}>← back to our little home</button><div className="album-intro"><div><div className="eyebrow">OUR LITTLE CORNER OF FOREVER</div><h1>Our <em>little album.</em></h1><p>Every cheesy smile, every silly face, all in one very cute place. ♡</p></div><button className="pink-button" onClick={onNew}>make new memories <span className="button-icon">↗</span></button></div>
-    <div className="local-info"><span>♡</span> Saved privately in this browser on this device. Not synchronized with your girlfriend's phone yet.</div>
+    <CloudAlbum localCards={cards} />
+    <div className="local-info"><span>♡</span> Your local photo box: these pictures stay in this browser unless you choose to share one above.</div>
     {loading ? <p className="empty-album">Opening our scrapbook...</p> : cards.length ? <div className="album-grid">{cards.map(({entry, url}) => <article className="album-card paper-card" key={entry.id}><div className="album-photo"><img src={url} alt={`Photo strip saved on ${new Date(entry.createdAt).toLocaleDateString()}`} /></div><div className="album-card-label"><strong>our little moment ♡</strong><small>{new Date(entry.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</small></div><div className="album-card-actions"><button onClick={() => downloadBlob(entry.image, `lovebug-${entry.id.slice(0,8)}.png`)}>↓ download</button><button onClick={() => void remove({entry,url})}>remove</button></div></article>)}</div> : <div className="empty-album paper-card"><img src="/stickers/envelope.svg" alt="" /><h2>Our album is waiting for us.</h2><p>No pictures here just yet. That means it's time to make some!</p><button className="pink-button" onClick={onNew}>take our first strip <span className="button-icon">♥</span></button></div>}
     {error && <p className="error-note" role="alert">{error}</p>}
   </main>;

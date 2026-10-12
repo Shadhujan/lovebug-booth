@@ -135,3 +135,8 @@ The solo camera marks the **actual film-strip crop** before capture, and the Rev
 ### v0.3.6 - move your photos directly
 
 On the review screen, drag any captured photo within its exact final strip crop. Pinch on a phone, scroll over the photo on desktop, or use the + and - buttons to zoom. The reset button centers only that photo. Keyboard users can focus the preview and use arrow keys, +, -, and 0. Preview and export share the same Canvas crop calculations, so the final strip matches the edited framing. Retaking/replacing a shot resets only that shot's crop.
+
+
+### v0.4 - Our shared private album
+
+A separate opt-in cloud album now lets two invited accounts share finished photo strips through Supabase Auth and a private Storage bucket. **Your normal photo booth stays local-first** and never uploads images without an explicit action. First run the SQL migration and follow [Private Shared Album Setup](docs/PRIVATE_SHARED_ALBUM_SETUP.md). Live Together still uses public unlisted room links until the follow-up Realtime security milestone.

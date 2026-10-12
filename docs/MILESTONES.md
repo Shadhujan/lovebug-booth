@@ -92,3 +92,16 @@ See [TOGETHER_APART_SETUP.md](TOGETHER_APART_SETUP.md) for setup, both-phone liv
 - [x] Photo Letters: choose among all four picture pairs, preview each separately, replace one picture, customize framing/background per pair or apply it to all four.
 - [x] Together Apart: independent flash preference on each device. Neither person can activate the other's flash; status is shown for convenience. Only the room creator starts the shared capture.
 - [ ] Verify flashes and mobile framing on real phones. The flash is a brief display effect, not a device LED torch and not a guaranteed improvement to photo exposure.
+
+## v0.4 - Private couple album (optional cloud feature)
+
+- [x] Supabase Auth with Google sign-in and optional email magic-link fallback.
+- [x] Two-person membership with one-time private invitation code stored only as a server-side hash.
+- [x] SQL migration for couple membership, private Storage bucket, metadata and Row Level Security.
+- [x] Explicit "share this strip" for browser-local images; never upload automatically.
+- [x] View, refresh, download and remove your own shared photos from both devices.
+- [x] Local booth, Photo Letters, editor and local album still usable without accounts.
+- [ ] Apply SQL migration and one-time code bootstrap in Supabase Dashboard.
+- [ ] Enable Google Auth and configure redirect URLs. Both partners must sign in and enter the code.
+- [ ] Security-test unauthorized account access and photo reads/writes against the real hosted Supabase project.
+- [ ] v0.4.1: replace unlisted public Realtime live-room channels with member-authenticated private channels.

@@ -260,3 +260,42 @@
   .review-shot{padding:10px}
   .review-frame-actions>span{font-size:12px}
 }
+
+/* v0.4 · a private photo box; local photos stay available without sign-in */
+.cloud-album{padding:28px;margin:18px 0 29px;background:#fffcfa;border-color:#f5d5de;overflow:hidden}
+.cloud-album-header{display:flex;justify-content:space-between;align-items:center;gap:22px}
+.cloud-album-header h2{margin:8px 0 10px;font-size:clamp(24px,3vw,35px);color:#794c61;letter-spacing:-1.3px}
+.cloud-album-header h2 em{font-family:Georgia,serif;color:#dc7996;font-weight:normal}
+.cloud-album-header p,.cloud-upload-section p{color:#a47a89;font-size:13px;line-height:1.7;max-width:580px;margin:0 0 16px}
+.cloud-album-symbol{font-size:41px;filter:drop-shadow(0 8px 10px #f2c5ce)}
+.cloud-login{display:grid;justify-items:start;gap:12px}
+.cloud-login .pink-button{min-width:215px}
+.cloud-hint{font-size:13px;color:#99717d;line-height:1.7;margin:6px 0 15px}
+.cloud-email-fallback{margin:10px 0 4px;width:min(100%,520px)}
+.cloud-email-fallback summary{cursor:pointer;font-size:12px;font-weight:700;color:#ae7087;margin:5px 0 12px}
+.cloud-email-fallback small,.cloud-join small{color:#ad8490;line-height:1.6;font-size:11px;display:block;margin-top:8px}
+.cloud-form{display:grid;gap:10px;width:min(100%,630px)}
+.cloud-form label{font-size:12px;font-weight:800;color:#a16479}
+.cloud-form-row{display:flex;gap:10px;align-items:center}
+.cloud-form-row input{min-width:0;flex:1;min-height:49px;background:#fffafa;border:1px solid #efc9d5;border-radius:13px;padding:11px 14px;font-size:13px;color:#674451}
+.cloud-form-row .soft-button,.cloud-form-row .pink-button{flex-shrink:0;min-height:48px}
+.cloud-album-session{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:11px 0 19px;background:#fff0f3;border-radius:13px;padding:10px 12px;color:#a46b80;font-size:12px}
+.cloud-album-session>div{display:flex;gap:10px}
+.cloud-album-session .plain-button{font-size:11px;padding:6px}
+.cloud-album-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.cloud-photo{background:#fff5f7;border:1px solid #f4d1dc;border-radius:17px;text-align:center;padding:12px;min-width:0}
+.cloud-photo-preview{min-height:170px;height:210px;display:grid;place-items:center;overflow:hidden;background:#ffebf0;border-radius:12px}
+.cloud-photo-preview img{max-height:190px;max-width:100%;width:auto;object-fit:contain;box-shadow:2px 5px 11px #a66d7830}
+.cloud-photo small{display:block;color:#af8391;margin:11px 0}
+.cloud-photo-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.cloud-photo-actions button,.cloud-local-choice button{border:1px solid #efc6d1;border-radius:99px;background:#fffafa;color:#a85e79;font-size:11px;min-height:38px;padding:7px 12px;font-weight:750}
+.cloud-photo-actions button:hover,.cloud-local-choice button:hover{background:#ffe6ed}
+.cloud-upload-section{border-top:1px dashed #efc4d0;margin-top:25px;padding-top:20px}
+.cloud-upload-section h3{font-family:Georgia,serif;font-style:italic;color:#9c6177;font-size:23px;margin-bottom:5px}
+.cloud-local-grid{display:flex;gap:12px;overflow-x:auto;padding:6px 2px 12px}
+.cloud-local-choice{width:110px;flex:0 0 110px;background:#fff0f4;border-radius:15px;padding:10px 8px;display:grid;justify-items:center;gap:8px}
+.cloud-local-choice img{height:115px;width:auto;max-width:100%;object-fit:contain}
+.cloud-local-choice button{white-space:normal;line-height:1.25;padding:6px 8px;font-size:10px}
+.cloud-good-news{background:#f1faef;color:#5e8369;border-radius:12px;padding:10px 13px;font-size:12px;margin-top:15px}
+@media(max-width:760px){.cloud-album{padding:18px;margin:12px 0 24px}.cloud-album-symbol{font-size:29px}.cloud-album-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cloud-photo{padding:8px}.cloud-photo-preview{height:172px;min-height:0}.cloud-photo-preview img{max-height:155px}.cloud-album-session{flex-wrap:wrap}.cloud-form-row input{min-width:0}}
+@media(max-width:380px){.cloud-album-header h2{font-size:24px}.cloud-form-row{align-items:stretch;flex-direction:column}.cloud-album-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cloud-photo-preview{height:145px}.cloud-photo-preview img{max-height:132px}}
