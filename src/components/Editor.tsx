@@ -4,15 +4,16 @@ import CutoutModal from './CutoutModal';
 import { makeId, STICKERS, TEXT_IDEAS } from '../lib/themes';
 import { listCustomStickers, saveCustomSticker, deleteCustomSticker } from '../lib/storage';
 import type { EditorDraft, Phase, SavedSticker, StickerItem, ThemeKey } from '../types';
+import { applyDraftDelta, diffDraft, hasDraftChanges, invertDraftDelta, type DraftDelta } from '../lib/sharedDraft';
 
-type Props = { photos: (string | null)[]; theme: ThemeKey; initial: EditorDraft; onDraftChange: (draft: EditorDraft) => void; onBack: () => void; onFinish: (result: string) => void };
+type Props = { photos: (string | null)[]; theme: ThemeKey; initial: EditorDraft; onDraftChange: (draft: EditorDraft) => void; onBack: () => void; onFinish: (result: string) => void; embedded?: boolean; shared?: { incoming?: { sequence: number; delta: DraftDelta }[]; onDelta: (delta: DraftDelta) => void } };
 type History = { past: EditorDraft[]; present: EditorDraft; future: EditorDraft[] };
 type Category = 'cute' | 'us' | 'text' | 'doodles';
 
 const COLORS = ['#e05e87', '#ad7bb9', '#71aaa3', '#eda871', '#794955', '#ffffff'];
 const FILTERS: EditorDraft['filter'][] = ['none', 'warm', 'dreamy', 'vintage', 'bw'];
 
-export default function Editor({ photos, theme, initial, onDraftChange, onBack, onFinish }: Props) {
+export default function Editor({ photos, theme, initial, onDraftChange, onBack, onFinish, embedded = false, shared }: Props) {
   const [history, setHistory] = useState<History>(() => ({ past: [], present: initial, future: [] }));
   const historyRef = useRef(history); historyRef.current = history;
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -31,25 +32,74 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
   const selected = useMemo(() => draft.stickers.find(sticker => sticker.id === selectedId), [draft.stickers, selectedId]);
 
   useEffect(() => { void listCustomStickers().then(setCustom).catch(() => undefined); }, []);
+  // In shared mode undo only your own operations. A remote stroke or sticker
+  // is never removed just because your older local undo snapshot lacked it.
+  const ownPast = useRef<{ forward: DraftDelta; reverse: DraftDelta }[]>([]);
+  const ownFuture = useRef<{ forward: DraftDelta; reverse: DraftDelta }[]>([]);
+  const lastIncomingSequence = useRef(shared?.incoming?.at(-1)?.sequence ?? 0);
+  const [historyTick, setHistoryTick] = useState(0);
   const publish = useCallback((next: History) => { historyRef.current = next; setHistory(next); onDraftChange(next.present); }, [onDraftChange]);
-  const commit = useCallback((nextDraft: EditorDraft) => {
+  const commit = useCallback((nextDraft: EditorDraft, baseline?: EditorDraft) => {
     const before = historyRef.current;
-    publish({ past: [...before.past.slice(-35), before.present], present: nextDraft, future: [] });
-  }, [publish]);
+    if (shared) {
+      const delta = diffDraft(baseline ?? before.present, nextDraft);
+      if (!hasDraftChanges(delta)) return;
+      const reverse = invertDraftDelta(before.present, delta);
+      ownPast.current.push({ forward: delta, reverse });
+      ownPast.current = ownPast.current.slice(-35);
+      ownFuture.current = [];
+      setHistoryTick(x => x + 1);
+      publish({ past: [], present: applyDraftDelta(before.present, delta), future: [] });
+      shared.onDelta(delta);
+    } else publish({ past: [...before.past.slice(-35), before.present], present: nextDraft, future: [] });
+  }, [publish, shared]);
   const undo = useCallback(() => {
-    const state = historyRef.current;
-    if (!state.past.length) return;
-    const previous = state.past[state.past.length - 1];
-    publish({ past: state.past.slice(0,-1), present: previous, future: [state.present, ...state.future] });
+    if (shared) {
+      const entry = ownPast.current.pop();
+      if (!entry) return;
+      ownFuture.current.push(entry);
+      setHistoryTick(x => x + 1);
+      publish({ past: [], present: applyDraftDelta(historyRef.current.present, entry.reverse), future: [] });
+      shared.onDelta(entry.reverse);
+    } else {
+      const state = historyRef.current;
+      if (!state.past.length) return;
+      const previous = state.past[state.past.length - 1];
+      publish({ past: state.past.slice(0,-1), present: previous, future: [state.present, ...state.future] });
+    }
     setSelectedId(null);
-  }, [publish]);
+  }, [publish, shared]);
   const redo = useCallback(() => {
-    const state = historyRef.current;
-    if (!state.future.length) return;
-    const [next, ...rest] = state.future;
-    publish({ past: [...state.past, state.present], present: next, future: rest });
+    if (shared) {
+      const entry = ownFuture.current.pop();
+      if (!entry) return;
+      ownPast.current.push(entry);
+      setHistoryTick(x => x + 1);
+      publish({ past: [], present: applyDraftDelta(historyRef.current.present, entry.forward), future: [] });
+      shared.onDelta(entry.forward);
+    } else {
+      const state = historyRef.current;
+      if (!state.future.length) return;
+      const [next, ...rest] = state.future;
+      publish({ past: [...state.past, state.present], present: next, future: rest });
+    }
     setSelectedId(null);
-  }, [publish]);
+  }, [publish, shared]);
+  useEffect(() => {
+    if (!shared?.incoming?.length) return;
+    let present = historyRef.current.present;
+    let changed = false;
+    for (const message of shared.incoming) {
+      if (message.sequence <= lastIncomingSequence.current) continue;
+      present = applyDraftDelta(present, message.delta);
+      lastIncomingSequence.current = message.sequence;
+      changed = true;
+    }
+    if (changed) publish({ past: [], present, future: [] });
+    // The queue only advances for newly received peer updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared?.incoming]);
+  void historyTick;
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -68,13 +118,13 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
 
   const addSticker = useCallback((src: string) => {
     const id = makeId(); const offset = (draft.stickers.length % 5) * 18;
-    const item: StickerItem = { id, kind: 'image', src, x: 222 + offset, y: 360 + offset, width: 118, height: 118, rotation: (draft.stickers.length % 3 - 1) * 11 };
+    const item: StickerItem = { id, kind: 'image', src, x: 222 + offset, y: 360 + offset, width: 118, height: 118, rotation: (draft.stickers.length % 3 - 1) * 11, ...(shared ? { layer: Math.max(0, ...draft.stickers.map((item,i) => item.layer ?? i)) + 1 } : {}) };
     commit({ ...draft, stickers: [...draft.stickers, item] }); setSelectedId(id); setMode('edit');
   }, [commit, draft]);
   const addText = (text: string) => {
     if (!text.trim()) return;
     const id = makeId(), value = text.trim().slice(0, 32);
-    const item: StickerItem = { id, kind: 'text', text: value, x: 250, y: 425, width: Math.min(380, Math.max(150, value.length * 18 + 24)), height: 62, rotation: -6, color: '#d55782' };
+    const item: StickerItem = { id, kind: 'text', text: value, x: 250, y: 425, width: Math.min(380, Math.max(150, value.length * 18 + 24)), height: 62, rotation: -6, color: '#d55782', ...(shared ? { layer: Math.max(0, ...draft.stickers.map((item,i) => item.layer ?? i)) + 1 } : {}) };
     commit({ ...draft, stickers: [...draft.stickers, item] }); setSelectedId(id); setTextInput(''); setMode('edit');
   };
   const patchSelected = (patch: Partial<StickerItem>) => {
@@ -87,13 +137,19 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
   };
   const duplicateSelected = () => {
     if (!selected) return;
-    const duplicate = { ...selected, id: makeId(), x: selected.x + 26, y: selected.y + 28 };
+    const duplicate = { ...selected, id: makeId(), x: selected.x + 26, y: selected.y + 28, ...(shared ? { layer: Math.max(0, ...draft.stickers.map((item,i) => item.layer ?? i)) + 1 } : {}) };
     commit({ ...draft, stickers: [...draft.stickers, duplicate] }); setSelectedId(duplicate.id);
   };
   const moveLayer = (front: boolean) => {
     if (!selected) return;
-    const items = draft.stickers.filter(s => s.id !== selected.id);
-    commit({ ...draft, stickers: front ? [...items, selected] : [selected, ...items] });
+    if (shared) {
+      const layers = draft.stickers.map((item,i) => item.layer ?? i);
+      const layer = front ? Math.max(...layers) + 1 : Math.min(...layers) - 1;
+      commit({ ...draft, stickers: draft.stickers.map(item => item.id === selected.id ? { ...item, layer } : item) });
+    } else {
+      const items = draft.stickers.filter(s => s.id !== selected.id);
+      commit({ ...draft, stickers: front ? [...items, selected] : [selected, ...items] });
+    }
   };
   const onCutoutCreated = async (src: string) => {
     const sticker: SavedSticker = { id: makeId(), src, createdAt: Date.now() };
@@ -108,14 +164,15 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
     finally { setWorking(false); }
   };
 
-  return <main className="inner-page page-width editor-page">
+  const Shell = embedded ? 'section' : 'main';
+  return <Shell className="inner-page page-width editor-page">
     <div className="editor-header"><button className="back-link" onClick={onBack}>← back to our photos</button><div className="editor-header-right"><span>STEP 04 / THE STICKER PLAYGROUND</span><button className="surprise-button" onClick={() => addSticker(STICKERS[Math.floor(Math.random()*STICKERS.length)].src)}>🎲 surprise me!</button></div></div>
     <header className="page-intro editor-intro"><h1>Decorate <em>our chaos!</em> <span>♡</span></h1><p>Drag, rotate, doodle, or add a tiny cutout of yourself. No rules, just cute.</p></header>
     <div className="editor-layout">
       <section className="editor-stage-section"><div className="canvas-mat"><img src="/stickers/bow.svg" className="mat-bow" alt=""/><StickerCanvas ref={stage} photos={photos} theme={theme} draft={draft} selectedId={selectedId} onSelect={setSelectedId} onCommit={commit} mode={mode} brushColor={brushColor} brushSize={brushSize} eraserSize={eraserSize}/><span className="mat-scribble">handmade with ♡</span></div><div className="canvas-help">{mode === 'draw' ? 'Draw directly on the strip with your finger or mouse.' : mode === 'erase' ? 'Rub across your doodles to erase only the lines, without touching the photos or stickers.' : 'Drag a sticker · move the round corner handle to resize · top handle to rotate · pinch with two fingers.'}</div></section>
       <section className="editor-sidebar">
         <div className="editor-toolbox paper-card"><div className="toolbox-top"><strong>little editing tools</strong><small>{selected ? 'sticker selected ♡' : 'pick a sticker to edit'}</small></div>
-          <div className="editor-tools"><button onClick={undo} disabled={!history.past.length} title="Undo">↶<small>undo</small></button><button onClick={redo} disabled={!history.future.length} title="Redo">↷<small>redo</small></button><button onClick={duplicateSelected} disabled={!selected} title="Duplicate">▢<small>copy</small></button><button onClick={deleteSelected} disabled={!selected} title="Delete">×<small>delete</small></button><button onClick={() => moveLayer(true)} disabled={!selected} title="Bring forward">⇧<small>front</small></button><button onClick={() => moveLayer(false)} disabled={!selected} title="Send backward">⇩<small>back</small></button></div>
+          <div className="editor-tools"><button onClick={undo} disabled={shared ? ownPast.current.length === 0 : !history.past.length} title="Undo">↶<small>undo</small></button><button onClick={redo} disabled={shared ? ownFuture.current.length === 0 : !history.future.length} title="Redo">↷<small>redo</small></button><button onClick={duplicateSelected} disabled={!selected} title="Duplicate">▢<small>copy</small></button><button onClick={deleteSelected} disabled={!selected} title="Delete">×<small>delete</small></button><button onClick={() => moveLayer(true)} disabled={!selected} title="Bring forward">⇧<small>front</small></button><button onClick={() => moveLayer(false)} disabled={!selected} title="Send backward">⇩<small>back</small></button></div>
         </div>
         <div className="sticker-palette paper-card"><div className="palette-top"><strong>Our sticker box</strong><span>✿</span></div><div className="sticker-tabs" role="tablist" aria-label="Sticker categories">
           {([['cute','cute pack'],['us','the two of us'],['text','love notes'],['doodles','doodles']] as [Category,string][]).map(([value,label]) => <button role="tab" aria-selected={category === value} key={value} className={category === value ? 'active' : ''} onClick={() => { setCategory(value); setMode(value === 'doodles' ? 'draw' : 'edit'); }}>{label}</button>)}
@@ -134,6 +191,7 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
         <div className="editor-finish"><div className="hand-note">looking good, cuties! ♡</div><button className="pink-button wide" onClick={() => void finish()} disabled={working}>{working ? 'developing our strip...' : 'finish our masterpiece'} <span className="button-icon">↗</span></button>{error && <p className="error-note" role="alert">{error}</p>}</div>
       </section>
     </div>
+    {shared && <p className="shared-edit-note" role="status">♡ Shared editing is live. Both of your stickers and doodles appear in this strip. Undo affects your own changes.</p>}
     {cutoutOpen && <CutoutModal onClose={() => setCutoutOpen(false)} onCreate={source => void onCutoutCreated(source)} />}
-  </main>;
+  </Shell>;
 }

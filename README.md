@@ -14,6 +14,12 @@ Live rooms are now **unlisted and server-authorized**: choose a **Quick Room** (
 
 **Required setup:** [Secure Live Rooms](docs/SECURE_LIVE_ROOMS.md). Run `supabase/migrations/20261012_002_secure_live_rooms.sql`, enable anonymous sign-ins, disable public Realtime channel access, then deploy. Existing unprotected v0.4 invitations will not work on v0.5.
 
+### v0.5.1 Together after the photo (shared + individual editing)
+
+After four Live Together photos, both participants can choose **Decorate together** (mutual consent, shared stickers/doodles/crops through peer-to-peer WebRTC) or **Make my own version** (private local edits). Captured photos are transferred directly from the host so shared editors use matching images. The host no longer closes the entire room by visiting Sticker Playground; either person can finish, save, download or share independently. The **Adjust our photo** button receives a brief, accessible hint after both cameras connect.
+
+No new database tables or cloud photo uploads. See [Collaborative Editing](docs/COLLABORATIVE_EDITING.md) for the data-flow, 45-minute expiration behavior, two-device checks, and offline fallback. **Both participants need the same v0.5.1 version after deployment.**
+
 ## Get started (Windows PowerShell)
 
 Prerequisites: Node.js 22.12+ or 24+, npm, Git. The versions you already have (Node 24.16, npm 11.5.2) are suitable.

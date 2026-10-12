@@ -11,7 +11,7 @@ type Props = {
   draft: EditorDraft;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onCommit: (draft: EditorDraft) => void;
+  onCommit: (draft: EditorDraft, baseline?: EditorDraft) => void;
   mode: Phase;
   brushColor: string;
   brushSize: number;
@@ -24,6 +24,7 @@ type DragState = {
   start: Point;
   item?: StickerItem;
   draft: EditorDraft;
+  baseline?: EditorDraft;
   drawing?: DrawStroke;
   changed?: boolean;
   last?: Point;
@@ -111,14 +112,14 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
       const next = eraseDoodleSegments(draft.strokes, point, point, p.eraserSize);
       const changed = next !== draft.strokes;
       draft.strokes = next;
-      stateRef.current = { mode: 'erase', start: point, last: point, draft, changed };
+      stateRef.current = { mode: 'erase', start: point, last: point, draft, baseline: p.draft, changed };
       transientRef.current = { draft, line: null };
       render(draft, null);
       return;
     }
     if (p.mode === 'draw') {
       const stroke: DrawStroke = { id: makeId(), color: p.brushColor, width: p.brushSize, points: [point] };
-      stateRef.current = { mode: 'draw', start: point, draft: copyDraft(p.draft), drawing: stroke };
+      stateRef.current = { mode: 'draw', start: point, draft: copyDraft(p.draft), baseline: p.draft, drawing: stroke };
       transientRef.current = { draft: copyDraft(p.draft), line: stroke };
       render(p.draft, null, stroke);
       return;
@@ -129,7 +130,7 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
       if (item) {
         const [a, b] = [...activePointers.current.values()];
         stateRef.current = {
-          mode: 'pinch', start: point, item: { ...item }, draft: copyDraft(transientRef.current?.draft || p.draft),
+          mode: 'pinch', start: point, item: { ...item }, draft: copyDraft(transientRef.current?.draft || p.draft), baseline: p.draft,
           initialDistance: Math.hypot(a.x - b.x, a.y - b.y),
           initialAngle: Math.atan2(b.y - a.y, b.x - a.x),
         };
@@ -145,7 +146,7 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
       stateRef.current = null; return;
     }
     selectedRef.current = item.id; p.onSelect(item.id);
-    stateRef.current = { mode: current?.id === item.id && handle ? handle : 'drag', start: point, item: { ...item }, draft: copyDraft(p.draft) };
+    stateRef.current = { mode: current?.id === item.id && handle ? handle : 'drag', start: point, item: { ...item }, draft: copyDraft(p.draft), baseline: p.draft };
     render(p.draft, item.id);
   };
 
@@ -208,7 +209,7 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
       if (state.drawing.points.length === 1) state.drawing.points.push({ ...state.drawing.points[0] });
       state.draft.strokes.push(state.drawing);
     }
-    if (state.mode === 'draw' || (state.mode === 'erase' && state.changed) || (state.item && transientRef.current)) propsRef.current.onCommit(state.draft);
+    if (state.mode === 'draw' || (state.mode === 'erase' && state.changed) || (state.item && transientRef.current)) propsRef.current.onCommit(state.draft, state.baseline);
     stateRef.current = null; transientRef.current = null;
     render(state.draft);
   };

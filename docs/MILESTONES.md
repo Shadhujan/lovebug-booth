@@ -126,4 +126,18 @@ See [TOGETHER_APART_SETUP.md](TOGETHER_APART_SETUP.md) for setup, both-phone liv
 - [x] Explain how browser storage can disappear and that the ZIP is not a restore/import feature.
 - [ ] Validate ZIP download, browser data deletion and mobile layout on a real phone.
 
-**Public launch warning:** Existing Live Together rooms use unlisted public Realtime channels. The archived v0.4 cloud-album SQL supports exactly one couple, NOT multiple unrelated users. Neither subsystem is public multi-user-ready.
+**Public launch warning:** v0.5 replaces public signaling with private Realtime RLS, but real unauthorized-channel tests and abuse controls remain essential. The archived v0.4 cloud-album SQL supports exactly one couple, NOT multiple unrelated users; do not expose that cloud feature publicly.
+
+## v0.5.1 — Together after the photo
+
+- [x] Brief accessible pulse + hint on the **Adjust our photo** control after both cameras connect.
+- [x] Preserve secure live-room membership during the post-capture stage instead of closing the host room on Decorate.
+- [x] Transfer the host's four JPEGs to the approved partner over bounded chunked WebRTC DataChannel; the guest acknowledges a matching photo set.
+- [x] Mutual opt-in to live collaborative editing; separate independent editing for either person.
+- [x] Reuse the existing four-photo drag/pinch Review before Sticker Playground in both paths.
+- [x] Synchronize per-sticker, per-stroke, reframe, caption, and filter changes peer-to-peer, with local undo/redo and consistent sticker order.
+- [x] Both participants can finish, keep images in IndexedDB, download and open a native Share sheet when supported.
+- [x] Keep an in-progress editor usable locally if the peer disconnects or the session expires.
+- [x] No Supabase schema or Storage changes; no additional npm dependencies.
+- [ ] Verify the complete two-phone flow (including simultaneous edits, room expiry and custom stickers) on the deployed HTTPS site. See [Collaborative Editing](COLLABORATIVE_EDITING.md).
+- [ ] Future: protected Daily Health & Keep-Alive heartbeat (separate infrastructure work, not part of v0.5.1).

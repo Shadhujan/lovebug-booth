@@ -11,6 +11,8 @@ export type StickerItem = {
   src?: string;
   text?: string;
   color?: string;
+  /** Stable stacking order for peer-to-peer shared editing. */
+  layer?: number;
 };
 export type PhotoFraming = { panX: number; panY: number; zoom: number };
 export type DrawStroke = { id: string; points: { x: number; y: number }[]; color: string; width: number };

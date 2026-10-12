@@ -12,9 +12,10 @@ type Props = {
   photoFraming: PhotoFraming[];
   onFraming: (index: number, framing: PhotoFraming) => void;
   readOnly?: boolean;
+  embedded?: boolean;
 };
 
-export default function Review({ photos, onPhotos, onRetake, onEditor, onBack, photoFraming, onFraming, readOnly = false }: Props) {
+export default function Review({ photos, onPhotos, onRetake, onEditor, onBack, photoFraming, onFraming, readOnly = false, embedded = false }: Props) {
   const pickerRef = useRef<HTMLInputElement>(null);
   const [replaceIndex, setReplaceIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,8 @@ export default function Review({ photos, onPhotos, onRetake, onEditor, onBack, p
     }
   };
 
-  return <main className="inner-page page-width review-page">
+  const Shell = embedded ? 'section' : 'main';
+  return <Shell className="inner-page page-width review-page">
     <button className="back-link" onClick={onBack}>← back to the previous step</button>
     <div className="page-intro">
       <div className="eyebrow">STEP 03 / THE REVEAL</div>
@@ -51,5 +53,5 @@ export default function Review({ photos, onPhotos, onRetake, onEditor, onBack, p
       <aside className="review-side paper-card"><img src="/stickers/bow.svg" alt="" /><h2>Ready to make it yours?</h2><p>Here's where the real chaos begins. Add bows, hearts, your own little cutouts, doodles and whatever makes you happy.</p><button className="pink-button wide" disabled={photos.some(p => !p)} onClick={onEditor}>decorate our chaos <span className="button-icon">↗</span></button><small>Each of the four slots needs a picture first.</small>{error && <p className="error-note" role="alert">{error}</p>}</aside>
     </div>
     <input type="file" ref={pickerRef} accept="image/*" className="visually-hidden" onChange={event => void onReplace(event)} aria-label="Replace selected photo" />
-  </main>;
+  </Shell>;
 }

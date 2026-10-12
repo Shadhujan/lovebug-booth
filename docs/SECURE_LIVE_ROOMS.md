@@ -76,3 +76,7 @@ This milestone replaces public Supabase Realtime channels with **server-authoriz
 ## Rollout / rollback
 
 This is a new SQL migration and doesn't modify the private album tables. If you roll back the frontend to a version before v0.5, those old clients may still use the unprotected **public** Realtime channel. **Keep public channel access disabled** and don't roll back to the old live-room flow on a public deployment. Database tables can remain unused; avoid dropping them while a room is active.
+
+## v0.5.1 follow-up: finish photos together
+
+Opening Sticker Playground no longer calls `lovebug_live_leave`. Both people may opt into collaborative sticker editing, or edit their photos separately. The host's four JPEGs and editing operations transfer directly over WebRTC DataChannel; the database retains only secure room admission/expiry metadata. Guest access is still checked every ~2.5 seconds. The 45-minute expiry is **not** extended while decorating, and expiring/revoking access does not delete photos already in the user's browser. See [Collaborative Editing](COLLABORATIVE_EDITING.md) for testing and privacy limits.

@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
+import Editor from './Editor';
+import Review from './Review';
+import Finish from './Finish';
+import { freshDraft } from '../lib/themes';
+import { applyDraftDelta, type DraftDelta } from '../lib/sharedDraft';
+import { SharedPhotoChannel, type PhotoMessage } from '../lib/sharedPhotoChannel';
+import type { EditorDraft, PhotoFraming, ThemeKey } from '../types';
 import { type RealtimeChannel } from '@supabase/supabase-js';
 import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
 import TogetherCompositionControls from './TogetherCompositionControls';
@@ -35,7 +42,9 @@ type Message = {
   ready?: boolean;
   enabled?: boolean;
 };
-type Props = { timer: number; onCompleted: (photos: string[]) => void };
+type PhotoStage = 'camera' | 'choice' | 'shared-review' | 'solo-review' | 'shared' | 'solo' | 'finished';
+type PhotoChoice = 'shared' | 'solo' | null;
+type Props = { timer: number; theme: ThemeKey; onPhotoStageChange?: (active: boolean) => void; onAlbum: () => void; onHome: () => void };
 
 const supabase = liveRoomClient;
 
@@ -45,7 +54,7 @@ function isMessage(value: unknown): value is Message {
   return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready', 'timer', 'flash'].includes(data.kind ?? '');
 }
 
-export default function LiveTogether({ timer, onCompleted }: Props) {
+export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum, onHome }: Props) {
   // Only an RPC-approved participant becomes an active room member. Opening
   // an invite URL never starts a camera or subscribes to signaling.
   const [room, setRoom] = useState<Room | null>(null);
@@ -76,6 +85,30 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [count, setCount] = useState<number | null>(null);
   const [shotCount, setShotCount] = useState(0);
   const [shots, setShots] = useState<string[]>([]);
+  const [photoStage, setPhotoStage] = useState<PhotoStage>('camera');
+  const photoStageRef = useRef(photoStage); photoStageRef.current = photoStage;
+  const [mineChoice, setMineChoice] = useState<PhotoChoice>(null);
+  const [partnerChoice, setPartnerChoice] = useState<PhotoChoice>(null);
+  const [hostPhotosReady, setHostPhotosReady] = useState(false);
+  const [guestCaptured, setGuestCaptured] = useState(false);
+  const [transportReady, setTransportReady] = useState(false);
+  const [photoNotice, setPhotoNotice] = useState('');
+  const [finishedImage, setFinishedImage] = useState('');
+  const [finishedFrom, setFinishedFrom] = useState<'shared' | 'solo'>('solo');
+  const photoChannelRef = useRef<SharedPhotoChannel | null>(null);
+  const photosQueuedRef = useRef(false);
+  const hostPhotosRef = useRef<string[] | null>(null);
+  const sharedDraftRef = useRef<EditorDraft>(freshDraft());
+  const individualDraftRef = useRef<EditorDraft>(freshDraft());
+  const [reviewVersion, setReviewVersion] = useState(0);
+  const [incomingEdit, setIncomingEdit] = useState<{sequence: number; delta: DraftDelta}[]>([]);
+  const incomingSequenceRef = useRef(0);
+  const seenOperationsRef = useRef(new Set<string>());
+  const adjustedOnceRef = useRef(false);
+  const [suggestAdjustments, setSuggestAdjustments] = useState(false);
+  const roomRef = useRef<Room | null>(null);
+  roomRef.current = room;
+
   const [shooting, setShooting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [flashEnabled, setFlashEnabled] = useState(() => readFlashPreference('together'));
@@ -118,8 +151,136 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const clientIdRef = useRef(CLIENT_ID());
   // Reading the in-memory image is safe; no personal picture is stored remotely.
   void customBackgroundUpdate;
+  void reviewVersion;
   const customImage = getCustomBackground(composition.customBackgroundId);
   const customSceneReady = composition.backdrop !== 'custom' || (Boolean(customImage) && peerBackgroundReadyId === composition.customBackgroundId);
+
+  useEffect(() => { onPhotoStageChange?.(photoStage !== 'camera'); }, [photoStage, onPhotoStageChange]);
+  useEffect(() => () => {
+    // Leaving the page ends the host's room. A guest already editing can
+    // finish offline when the connection closes.
+    if (roomRef.current) void leaveLiveRoom(roomRef.current.id).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (shots.length !== 4 || photoStageRef.current !== 'camera' || shootingRef.current) return;
+    setPhotoStage('choice');
+    // The camera is no longer needed; the peer-to-peer data channel remains.
+    // Both devices reached the four-shot sequence before changing modes.
+  }, [shots, shooting]);
+
+  useEffect(() => {
+    if (!room || room.role !== 'host' || shots.length !== 4 || !guestCaptured || !transportReady || photosQueuedRef.current) return;
+    const transport = photoChannelRef.current;
+    if (!transport?.ready) return;
+    photosQueuedRef.current = true;
+    void transport.send({ kind: 'photos', photos: shots }).catch(() => {
+      photosQueuedRef.current = false;
+      setPhotoNotice('Could not send the common photos. Your lovebug can still edit their own copy.');
+    });
+  }, [shots, room, guestCaptured, transportReady]);
+
+  useEffect(() => {
+    if (mineChoice !== 'shared' || partnerChoice !== 'shared' || photoStage !== 'choice' || !room) return;
+    if (!transportReady || !hostPhotosReady) return;
+    setPhotoStage('shared-review');
+    setSettingsOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [mineChoice, partnerChoice, photoStage, transportReady, hostPhotosReady, room]);
+
+  // Do not turn a partner's last countdown frame black: hold the outgoing
+  // camera briefly if the other browser is still finishing its four photos.
+  // The DataChannel stays open after video tracks stop, so decoration is live.
+  useEffect(() => {
+    if (photoStage === 'camera' || photoStage === 'choice') return;
+    const stop = () => streamRef.current?.getTracks().forEach(track => track.stop());
+    const partnerFinished = room?.role === 'host' ? guestCaptured : hostPhotosReady;
+    if (partnerFinished || !room || !connected) { stop(); return; }
+    const timeout = window.setTimeout(stop, 7000);
+    return () => window.clearTimeout(timeout);
+  }, [photoStage, room, connected, guestCaptured, hostPhotosReady]);
+
+  useEffect(() => {
+    if (connected && localReady && remoteReady && !adjustedOnceRef.current) setSuggestAdjustments(true);
+  }, [connected, localReady, remoteReady]);
+
+  function sendPhotoMessage(message: PhotoMessage) {
+    const channel = photoChannelRef.current;
+    if (!channel?.ready) { setPhotoNotice('The private photo connection is unavailable. You can still make your own version.'); return; }
+    void channel.send(message).catch(reason => {
+      setPhotoNotice(reason instanceof Error ? reason.message : 'Could not share that edit with your lovebug.');
+    });
+  }
+
+  function chooseEditing(choice: 'shared' | 'solo') {
+    if (shots.length !== 4 || photoStageRef.current !== 'choice') return;
+    if (choice === 'shared' && (!transportReady || !hostPhotosReady)) {
+      setPhotoNotice('Waiting for your matching four photos to arrive on both devices. You can make your own version meanwhile.');
+      return;
+    }
+    setMineChoice(choice);
+    sendPhotoMessage({ kind: 'choice', choice });
+    setPhotoNotice('');
+    if (choice === 'solo') {
+      individualDraftRef.current = freshDraft();
+      setPhotoStage('solo-review');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function onSharedEdit(delta: DraftDelta) {
+    sharedDraftRef.current = applyDraftDelta(sharedDraftRef.current, delta);
+    setReviewVersion(x => x + 1);
+    const id = crypto.randomUUID();
+    seenOperationsRef.current.add(id);
+    sendPhotoMessage({ kind: 'edit', id, delta });
+  }
+
+  function reframeShot(index: number, framing: PhotoFraming) {
+    if (index < 0 || index > 3) return;
+    const delta: DraftDelta = { frame: { index, value: framing } };
+    if (photoStageRef.current === 'shared-review') {
+      onSharedEdit(delta);
+    } else {
+      individualDraftRef.current = applyDraftDelta(individualDraftRef.current, delta);
+      setReviewVersion(x => x + 1);
+    }
+  }
+
+  function goToStickerEditor() {
+    if (photoStageRef.current === 'shared-review') setPhotoStage('shared');
+    else if (photoStageRef.current === 'solo-review') setPhotoStage('solo');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function finishEditing(image: string, from: 'shared' | 'solo') {
+    setFinishedImage(image);
+    setFinishedFrom(from);
+    setPhotoStage('finished');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function backToChoices() {
+    setMineChoice(null);
+    setPartnerChoice(null);
+    if (photoChannelRef.current?.ready) sendPhotoMessage({ kind: 'choice', choice: 'solo' });
+    setPhotoStage('choice');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function endPhotoAdventure() {
+    leaveRoom();
+    setPhotoStage('camera');
+    setPhotoNotice('');
+    setFinishedImage('');
+    onHome();
+  }
+
+  function openAlbumFromPhoto() {
+    leaveRoom();
+    setPhotoStage('camera');
+    onAlbum();
+  }
 
   function send(message: Omit<Message, 'from'>) {
     const channel = channelRef.current;
@@ -209,7 +370,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
           setRoom(null);
           setLobbyState('ended');
           setPendingGuest(null);
-          setNotice('This room ended or your access changed. Start a new room to take more pictures.');
+          if (photoStageRef.current !== 'camera') {
+            setPhotoNotice('The room ended. Your captured photos and edits are still here; finish or download your own version.');
+          } else setNotice('This room ended or your access changed. Start a new room to take more pictures.');
           return;
         }
         setRoomExpires(info.expires_at ?? null);
@@ -266,7 +429,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         setShotCount(made.length); setCount(null);
         await sleep(450);
       }
-      if (operation === operationRef.current) setShots(made);
+      if (operation === operationRef.current) {
+        setShots(room?.role === 'guest' && hostPhotosRef.current ? hostPhotosRef.current : made);
+        if (room?.role === 'guest') sendPhotoMessage({ kind: 'captured' });
+      }
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : 'Could not finish this photo strip.');
     } finally {
@@ -287,6 +453,13 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setPartnerFlashEnabled(null); setFlashActive(false);
     setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
     setPeerBackgroundReadyId(null);
+    photosQueuedRef.current = false;
+    hostPhotosRef.current = null;
+    setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false);
+    setMineChoice(null); setPartnerChoice(null); setPhotoNotice('');
+    sharedDraftRef.current = freshDraft(); individualDraftRef.current = freshDraft();
+    seenOperationsRef.current.clear();
+    adjustedOnceRef.current = false; setSuggestAdjustments(false);
     appliedSceneRef.current = { tick: 0, by: '' }; sceneClockRef.current = 0;
     setStatus('Checking secure room access before opening your camera...');
     const clientId = clientIdRef.current;
@@ -300,6 +473,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     }
 
     function disconnectPeer() {
+      photoChannelRef.current?.close(); photoChannelRef.current = null;
+      setTransportReady(false);
       backgroundChannelRef.current?.close(); backgroundChannelRef.current = null;
       setPeerBackgroundReadyId(null);
       setPartnerFlashEnabled(null);
@@ -332,15 +507,55 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       transport.attach(channel);
     }
 
+    function onPhotoChannel(channel: RTCDataChannel) {
+      const transport = new SharedPhotoChannel({
+        onOpen: () => setTransportReady(true),
+        onClose: () => {
+          setTransportReady(false);
+          photosQueuedRef.current = false;
+          if (photoStageRef.current !== 'camera') setPhotoNotice('Your lovebug disconnected. You can still edit and download these photos on this device.');
+        },
+        onError: message => setPhotoNotice(message),
+        onMessage: message => {
+          if (message.kind === 'photos') {
+            if (joinedRoom.role !== 'guest') return;
+            hostPhotosRef.current = message.photos;
+            setHostPhotosReady(true);
+            if (!shootingRef.current && photoStageRef.current === 'choice') setShots(message.photos);
+            void transport.send({ kind: 'received' }).catch(() => setPhotoNotice('Could not acknowledge the shared photos.'));
+          } else if (message.kind === 'received') {
+            if (joinedRoom.role === 'host') setHostPhotosReady(true);
+          } else if (message.kind === 'captured') {
+            if (joinedRoom.role === 'host') setGuestCaptured(true);
+          } else if (message.kind === 'choice') {
+            setPartnerChoice(message.choice);
+          } else if (message.kind === 'edit') {
+            if (seenOperationsRef.current.has(message.id)) return;
+            seenOperationsRef.current.add(message.id);
+            if (seenOperationsRef.current.size > 600) seenOperationsRef.current.clear();
+            sharedDraftRef.current = applyDraftDelta(sharedDraftRef.current, message.delta);
+            setReviewVersion(x => x + 1);
+            if (photoStageRef.current === 'shared') setIncomingEdit(current => [...current.slice(-119), { sequence: ++incomingSequenceRef.current, delta: message.delta }]);
+          }
+        },
+      });
+      photoChannelRef.current?.close();
+      photoChannelRef.current = transport;
+      transport.attach(channel);
+    }
+
     function connectPeer(to: string): RTCPeerConnection {
       if (peerRef.current && otherIdRef.current === to) return peerRef.current;
       disconnectPeer();
       otherIdRef.current = to;
       const connection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       peerRef.current = connection;
-      if (joinedRoom.role === 'host') onBackgroundChannel(connection.createDataChannel('lovebug-background'));
-      else connection.ondatachannel = event => {
+      if (joinedRoom.role === 'host') {
+        onBackgroundChannel(connection.createDataChannel('lovebug-background'));
+        onPhotoChannel(connection.createDataChannel('lovebug-photo-editor'));
+      } else connection.ondatachannel = event => {
         if (event.channel.label === 'lovebug-background') onBackgroundChannel(event.channel);
+        if (event.channel.label === 'lovebug-photo-editor') onPhotoChannel(event.channel);
       };
       for (const track of streamRef.current?.getTracks() ?? []) connection.addTrack(track, streamRef.current!);
       connection.ontrack = event => {
@@ -540,12 +755,6 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
 
-  function finishPhotos() {
-    const ready = [...shots];
-    leaveRoom();
-    onCompleted(ready);
-  }
-
   async function createRoom() {
     if (!supabase || roomBusy) { if (!supabase) setNotice('Connect Supabase first (see docs/SECURE_LIVE_ROOMS.md).'); return; }
     setRoomBusy(true); setNotice('');
@@ -599,6 +808,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setRoomPin(null); setPendingGuest(null); setRoomExpires(null); setEnteredPin('');
     setCopied(false); setNotice(message); setStatus('Create a room or open an invite.');
     setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
+    setPhotoStage('camera'); setMineChoice(null); setPartnerChoice(null); setReviewVersion(0);
+    setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false); photosQueuedRef.current = false;
+    setPhotoNotice(''); setFinishedImage(''); setIncomingEdit([]);
     setSettingsOpen(false);
     setPartnerFlashEnabled(null); setFlashActive(false);
     cutoutsRef.current = {}; cutoutsReadyRef.current = false;
@@ -609,7 +821,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   function leaveRoom() {
     // The room owner explicitly ends it for everyone. An invited guest merely
     // leaves their seat; the host may approve another guest later.
-    if (room) void leaveLiveRoom(room.id).catch(() => undefined);
+    if (room) { roomRef.current = null; void leaveLiveRoom(room.id).catch(() => undefined); }
     else if (invitationId && lobbyState === 'waiting') void leaveLiveRoom(invitationId).catch(() => undefined);
     resetLocalRoom();
   }
@@ -659,6 +871,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   }
 
   function openAdjustments() {
+    adjustedOnceRef.current = true;
+    setSuggestAdjustments(false);
     setSettingsOpen(true);
     // On phones and compact laptops, bring the full-size photo above the
     // bottom inspector. The inspector never changes the photo's dimensions.
@@ -721,7 +935,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     cutoutsReadyRef.current = false;
     setCutoutStatus(virtualEnabled ? 'loading' : 'off');
     setMissingPerson(null);
-    if (!virtualEnabled || !room || !connected || !localReady || !remoteReady) {
+    if (photoStage !== 'camera' || !virtualEnabled || !room || !connected || !localReady || !remoteReady) {
       if (room) send({ kind: 'cutout-ready', ready: false });
       return () => { active = false; };
     }
@@ -791,13 +1005,13 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     };
     // This effect changes only when entering/leaving virtual mode, not when
     // selecting a different scene or tweaking the sliders.
-  }, [room, connected, localReady, remoteReady, virtualEnabled]);
+  }, [room, connected, localReady, remoteReady, virtualEnabled, photoStage]);
 
   // Preview and JPEG export use the same drawing function, crop and orientation.
   // Render at 15 fps to avoid needless phone battery drain. Canvas is decorative
   // only; it never uploads video frames or camera images.
   useEffect(() => {
-    if (!room || !connected || !localReady || !remoteReady) return;
+    if (photoStage !== 'camera' || !room || !connected || !localReady || !remoteReady) return;
     const canvas = previewCanvasRef.current;
     if (!canvas) return;
     const scratch = document.createElement('canvas');
@@ -834,9 +1048,55 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     };
     request = window.requestAnimationFrame(draw);
     return () => window.cancelAnimationFrame(request);
-  }, [room, connected, localReady, remoteReady]);
+  }, [room, connected, localReady, remoteReady, photoStage]);
 
   return <section className="live-together" aria-label="Live remote photo booth">
+    {photoStage !== 'camera' && <div className="live-post-capture">
+      {photoStage === 'choice' && <section className="paper-card live-photo-choice" aria-label="Choose how to decorate">
+        <div className="eyebrow">FOUR PICTURES / TWO LOVEBUGS</div>
+        <h2>Our photos are ready! <span aria-hidden="true">♡</span></h2>
+        <p>We've got the cute part. Shall we decorate one strip together or each make our own?</p>
+        <div className="live-photo-choice-preview">{shots.map((image, index) => <img key={index} src={image} alt={`Our shared photo ${index + 1}`} />)}</div>
+        <div className="live-photo-choice-options">
+          <button className={`live-photo-choice-option ${mineChoice === 'shared' ? 'chosen' : ''}`} type="button" onClick={() => chooseEditing('shared')} disabled={!transportReady || !hostPhotosReady || partnerChoice === 'solo'}>
+            <span className="live-choice-icon" aria-hidden="true">♡</span><strong>decorate together</strong>
+            <small>Both of you add stickers and doodles to the same strip, live.</small>
+          </button>
+          <button className="live-photo-choice-option" type="button" onClick={() => chooseEditing('solo')}>
+            <span className="live-choice-icon" aria-hidden="true">✿</span><strong>make my own version</strong>
+            <small>Decorate your own copy, then save or share it from your phone.</small>
+          </button>
+        </div>
+        <p className="live-choice-status" role="status">{partnerChoice === 'shared' && mineChoice !== 'shared' ? '♡ Your lovebug wants to decorate together. Choose the heart if you want to join them.' :
+          partnerChoice === 'solo' ? 'Your lovebug is making their own version. You can make yours too.' :
+          mineChoice === 'shared' ? 'Waiting for your lovebug to choose decorate together…' :
+          !hostPhotosReady ? 'Waiting for both phones to finish capturing and receive the same four photos… You can still edit your own version.' :
+          'Your pictures stay on your devices. You both get to choose.'}</p>
+        {photoNotice && <p className="error-note" role="status">{photoNotice}</p>}
+        <small>Nothing uploads to an album. Shared edits use your private peer-to-peer connection. This room expires after 45 minutes.</small>
+      </section>}
+      {(photoStage === 'shared-review' || photoStage === 'solo-review') && <>
+        <div className="paper-card live-editor-note"><div><strong>♡ Make each photo feel just right</strong><p>{photoStage === 'shared-review' ? 'Drag and zoom each frame. Both phones will use the same framing.' : 'Adjust each shot for your own version.'}</p></div><button className="soft-button" onClick={backToChoices}>← choices</button></div>
+        <Review embedded readOnly photos={shots} onPhotos={() => undefined} onRetake={() => undefined}
+          photoFraming={Array.from({length:4}, (_,i) => (photoStage === 'shared-review' ? sharedDraftRef.current : individualDraftRef.current).photoFraming?.[i] ?? {panX:0,panY:0,zoom:1})}
+          onFraming={reframeShot} onEditor={goToStickerEditor} onBack={backToChoices} />
+      </>}
+      {(photoStage === 'shared' || photoStage === 'solo') && <>
+        <div className="paper-card live-editor-note"><div><strong>{photoStage === 'shared' ? '♡ One little masterpiece, two editors' : '✿ Your own little masterpiece'}</strong><p>{photoStage === 'shared' ? transportReady && room ? 'Your edits appear on both phones. Only your own actions go in your undo history.' : 'The connection ended, but you can keep decorating this photo on your device.' : 'Your decorations belong to this copy only. Share or download when you are ready.'}</p></div><button className="soft-button" onClick={backToChoices}>← choices</button></div>
+        <Editor embedded photos={shots} theme={theme}
+          initial={photoStage === 'shared' ? sharedDraftRef.current : individualDraftRef.current}
+          onDraftChange={next => { if (photoStage === 'shared') sharedDraftRef.current = next; else individualDraftRef.current = next; }}
+          shared={photoStage === 'shared' ? { incoming: incomingEdit, onDelta: onSharedEdit } : undefined}
+          onBack={() => setPhotoStage(photoStage === 'shared' ? 'shared-review' : 'solo-review')} onFinish={image => finishEditing(image, photoStage)} />
+        {photoNotice && <p className="error-note" role="status">{photoNotice}</p>}
+      </>}
+      {photoStage === 'finished' && <>
+        <Finish embedded image={finishedImage} theme={theme} onAlbum={openAlbumFromPhoto} onAgain={endPhotoAdventure}
+          onBack={() => { setPhotoStage(finishedFrom); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+        {photoNotice && <p className="live-choice-status" role="status">{photoNotice}</p>}
+      </>}
+    </div>}
+    <div className={photoStage === 'camera' ? undefined : 'live-camera-hidden'} aria-hidden={photoStage !== 'camera' || undefined}>
     {flashActive && <div className="lovebug-screen-flash" aria-hidden="true" />}
     {!supabase && <div className="together-config-note" role="status"><strong>One-time setup needed for live rooms.</strong> Add your Supabase project URL and publishable key to <code>.env.local</code>, then restart Vite. The Photo Letters tab works without it.</div>}
     {!room ? <div className="paper-card live-lobby secure-live-lobby">
@@ -890,8 +1150,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
             <div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame shows the full combined photo; the dotted center area is what fits on the final strip. You can reframe each shot afterward.</p></div>
             <div className="live-stage-actions">
               <label className="together-toggle"><input type="checkbox" checked={showGuides} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowGuides(event.target.checked)} /> Show composition guides</label>
-              <button type="button" className="live-adjust-trigger" aria-controls="live-adjust-panel" aria-expanded={settingsOpen} onClick={openAdjustments}>
-                <span aria-hidden="true">✿</span> adjust our photo
+              <button type="button" className={`live-adjust-trigger ${suggestAdjustments && !settingsOpen ? 'live-adjust-sparkle' : ''}`} aria-controls="live-adjust-panel" aria-expanded={settingsOpen} onClick={openAdjustments}>
+                <span aria-hidden="true">✿</span> adjust our photo{suggestAdjustments && !settingsOpen && <small className="live-adjust-hint">make this picture yours ♡</small>}
               </button>
             </div>
           </div>
@@ -921,7 +1181,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
           <div className="live-mini-cameras"><div className="live-mini-camera"><div className="live-camera-label">your camera <span>{localReady ? 'on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className={mirrorSelfView ? 'live-local-video' : ''} aria-label="Your private selfie preview" />{!localReady && <span className="live-video-placeholder">waking up...</span>}</div></div><div className="live-mini-camera"><div className="live-camera-label">your lovebug <span>{connected && remoteReady ? 'here with you' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera thumbnail" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting...</span>}</div></div></div>
           <label className="together-toggle selfie-flip"><input type="checkbox" checked={mirrorSelfView} onChange={(event: ChangeEvent<HTMLInputElement>) => setMirrorSelfView(event.target.checked)} /> Mirror my little selfie tile (only my tile, not the saved photo)</label>
           {shotCount > 0 && <div className="live-shot-progress" aria-label={`${shotCount} of 4 photos captured`}>{[0,1,2,3].map(index => <span key={index} className={index < shotCount ? 'done' : ''}>{index < shotCount ? '\u2665' : index + 1}</span>)}</div>}
-          {shots.length === 4 && <div className="live-finished"><div className="live-finished-preview">{shots.map((item,index) => <img key={index} src={item} alt={`Combined live picture ${index + 1}`} />)}</div><button className="pink-button" onClick={finishPhotos}>decorate our photos &#8599;</button></div>}
+          {shots.length === 4 && <div className="live-finished"><div className="live-finished-preview">{shots.map((item,index) => <img key={index} src={item} alt={`Combined live picture ${index + 1}`} />)}</div><p>♡ Your four photos are ready. Choose how to decorate next.</p></div>}
           {notice && <p role="alert" className="error-note">{notice}</p>}
           <small className="live-privacy-note">Camera video streams directly between browsers using WebRTC. Supabase only relays connection messages and the countdown. Some networks need a TURN relay; if it fails, switch to Photo Letters.</small>
         </div>
@@ -944,5 +1204,6 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         </div>
       </div>
     </>}
+    </div>
   </section>;
 }
