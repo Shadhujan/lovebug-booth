@@ -37,7 +37,7 @@ export default function Review({ photos, onPhotos, onRetake, onEditor, onBack, p
     <div className="page-intro">
       <div className="eyebrow">STEP 03 / THE REVEAL</div>
       <h1>Look at <em>these cuties!</em></h1>
-      <p>Drag each photo until it looks just right. Pinch with two fingers or use + and - to zoom. What you see here is exactly what goes in your strip.</p>
+      <p>Drag each photo until it looks just right. <span className="review-desktop-copy">Pinch with two fingers or use + and - to zoom. </span><span className="review-mobile-copy">Pinch with two fingers to zoom. </span>What you see here is exactly what goes in your strip.</p>
     </div>
     <div className="review-layout"><div className="review-grid">{photos.map((photo, index) => <div className="review-shot paper-card" key={index}>
       {photo

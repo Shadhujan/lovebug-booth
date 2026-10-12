@@ -161,7 +161,7 @@ export default function PhotoAdjuster({ source, index, framing, onChange }: Prop
         height={PHOTO_H * PREVIEW_SCALE}
         tabIndex={0}
         role="img"
-        aria-label={`Photo ${index + 1}. Drag to reposition. Pinch or use the buttons to zoom. Arrow keys move the photo, plus and minus zoom, zero resets.`}
+        aria-label={`Photo ${index + 1}. Drag to reposition. Pinch to zoom on a touchscreen; mouse wheel or plus and minus keys zoom on desktop. Arrow keys move the photo, zero resets.`}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -173,7 +173,12 @@ export default function PhotoAdjuster({ source, index, framing, onChange }: Prop
       {loadError && <span role="alert" className="review-photo-load-error">Couldn't preview this photo</span>}
     </div>
     <div className="review-frame-actions">
-      <span>drag photo to adjust <small>pinch or scroll to zoom</small></span>
+      <span>
+        <span className="review-desktop-copy">drag photo to adjust</span>
+        <span className="review-mobile-copy">drag to move</span>
+        <small className="review-desktop-copy">pinch or scroll to zoom</small>
+        <small className="review-mobile-copy">pinch to zoom</small>
+      </span>
       <div className="review-zoom-actions" aria-label={`Zoom for photo ${index + 1}`}>
         <button type="button" onClick={() => setZoom(frameRef.current.zoom - 0.2)} disabled={framing.zoom <= 1.001} aria-label={`Zoom out photo ${index + 1}`}>-</button>
         <output aria-label={`Zoom level photo ${index + 1}`}>{Math.round(framing.zoom * 100)}%</output>
