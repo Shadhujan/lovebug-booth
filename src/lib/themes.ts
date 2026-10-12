@@ -41,7 +41,7 @@ export const TEXT_IDEAS = [
 ];
 
 export function freshDraft(): import('../types').EditorDraft {
-  return { stickers: [], strokes: [], filter: 'none', caption: 'just us, always ♡' };
+  return { stickers: [], strokes: [], filter: 'none', caption: 'just us, always ♡', photoFocusY: [50, 50, 50, 50] };
 }
 
 export function makeId() { return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now() + Math.random()); }

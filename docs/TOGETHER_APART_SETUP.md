@@ -107,3 +107,11 @@ When deployed, test:
 ## v0.3 virtual backgrounds
 
 See [SHARED_VIRTUAL_BACKGROUNDS.md](SHARED_VIRTUAL_BACKGROUNDS.md). This adds optional lazy-loaded person segmentation and four local illustrated scenes without changing Supabase configuration. Original cameras remains the default and works if the model is blocked or slow. Both phones must refresh after deploying the update.
+
+## v0.3.5 - Flash choice and Photo Letters
+
+- Each person sees their own **Flash MY screen** checkbox next to the capture controls. Each device remembers its own preference and starts with flash OFF. The setting does not modify the partner's screen; together you may choose neither / only one / both.
+- Host and guest see the other's flash preference, but cannot change it. The room creator still starts the countdown.
+- The screen briefly brightens while capturing, without requesting flashlight/torch permissions. Hardware LED flash is not supported by this release. If a person is sensitive to bright flashes, leave it off.
+- In Photo Letters, choose photo-pair 1-4 and modify framing individually; select **use this framing for all 4** if desired. You may replace your own or your partner's photo for just the selected pair.
+- After shooting in the solo booth, the Review step shows each exact film-strip crop. Adjust any photo vertically, or retake a single shot; you should not have to restart all four.

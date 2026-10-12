@@ -4,6 +4,7 @@ import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComp
 import TogetherCompositionControls from './TogetherCompositionControls';
 import { BackgroundChannel } from '../lib/backgroundChannel';
 import { createCustomBackground, getCustomBackground } from '../lib/customBackdrop';
+import { readFlashPreference, saveFlashPreference } from '../lib/flashPreference';
 
 const URL_PATTERN = /^[a-f0-9]{32}$/;
 const CLIENT_ID = () => crypto.randomUUID();
@@ -24,13 +25,14 @@ const later = (next: SceneRevision, current: SceneRevision) =>
 type Message = {
   from: string;
   to?: string;
-  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready' | 'timer';
+  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready' | 'timer' | 'flash';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   composition?: TogetherComposition;
   revision?: SceneRevision;
   seconds?: number;
   ready?: boolean;
+  enabled?: boolean;
 };
 type Props = { timer: number; onCompleted: (photos: string[]) => void };
 
@@ -56,7 +58,7 @@ function roomLink(id: string): string {
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<Message>;
-  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready', 'timer'].includes(data.kind ?? '');
+  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready', 'timer', 'flash'].includes(data.kind ?? '');
 }
 
 export default function LiveTogether({ timer, onCompleted }: Props) {
@@ -78,6 +80,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [shots, setShots] = useState<string[]>([]);
   const [shooting, setShooting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [flashEnabled, setFlashEnabled] = useState(() => readFlashPreference('together'));
+  const [partnerFlashEnabled, setPartnerFlashEnabled] = useState<boolean | null>(null);
+  const [flashActive, setFlashActive] = useState(false);
   const [cutoutStatus, setCutoutStatus] = useState<'off' | 'loading' | 'searching' | 'ready' | 'error'>('off');
   const [missingPerson, setMissingPerson] = useState<'host' | 'guest' | null>(null);
   const [peerCutoutReady, setPeerCutoutReady] = useState(false);
@@ -110,6 +115,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const compositionRef = useRef(composition);
   compositionRef.current = composition;
   const shootingRef = useRef(false);
+  const flashEnabledRef = useRef(flashEnabled); flashEnabledRef.current = flashEnabled;
   const runSequenceRef = useRef<(selected: TogetherComposition, seconds: number) => Promise<void>>(async () => undefined);
   const clientIdRef = useRef(CLIENT_ID());
   // Reading the in-memory image is safe; no personal picture is stored remotely.
@@ -159,10 +165,13 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         if (selected.backdrop !== 'original' && (!cutoutsReadyRef.current || !cutoutsRef.current.host || !cutoutsRef.current.guest)) {
           throw new Error('A person disappeared from the virtual scene. Please move into the light and take the photos again, or choose Original cameras.');
         }
+        // Each browser flashes ONLY if its owner opted in. Allow a frame to paint before capture.
+        if (flashEnabledRef.current) { setFlashActive(true); await sleep(110); }
         // Host/guest source ordering is identical on both devices, including mirrors.
         made.push(captureLivePair(mine, theirs, selected, room?.role ?? 'host',
           selected.backdrop !== 'original' && cutoutsReadyRef.current
             ? cutoutsRef.current as TogetherCutouts : undefined));
+        if (flashEnabledRef.current) { await sleep(90); setFlashActive(false); }
         setShotCount(made.length); setCount(null);
         await sleep(450);
       }
@@ -170,6 +179,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : 'Could not finish this photo strip.');
     } finally {
+      setFlashActive(false);
       if (operation === operationRef.current) { shootingRef.current = false; setCount(null); setShooting(false); }
     }
   }
@@ -183,6 +193,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     connectedRef.current = false;
     setLocalReady(false); setRemoteReady(false); setConnected(false);
     setPeerPresent(false); setShots([]); setShotCount(0); setNotice('');
+    setPartnerFlashEnabled(null); setFlashActive(false);
     setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
     setPeerBackgroundReadyId(null);
     appliedSceneRef.current = { tick: 0, by: '' }; sceneClockRef.current = 0;
@@ -200,6 +211,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     function disconnectPeer() {
       backgroundChannelRef.current?.close(); backgroundChannelRef.current = null;
       setPeerBackgroundReadyId(null);
+      setPartnerFlashEnabled(null);
       peerRef.current?.close(); peerRef.current = null;
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
       queuedIceRef.current = [];
@@ -270,6 +282,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (!active || !isMessage(raw)) return;
       if (raw.from === clientId || (raw.to && raw.to !== clientId)) return;
       if (otherIdRef.current && otherIdRef.current !== raw.from) return;
+      if (raw.kind === 'flash') {
+        if (typeof raw.enabled === 'boolean') setPartnerFlashEnabled(raw.enabled);
+        return;
+      }
       if (raw.kind === 'timer') {
         if ([3, 5, 10].includes(raw.seconds ?? -1)) {
           shotTimerRef.current = raw.seconds!; setShotTimer(raw.seconds!);
@@ -341,6 +357,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         publish({ kind: 'offer', to, sdp: pc.localDescription ?? undefined });
         publish({ kind: 'scene', to, composition: compositionRef.current, revision: appliedSceneRef.current });
         publish({ kind: 'timer', to, seconds: shotTimerRef.current });
+        publish({ kind: 'flash', to, enabled: flashEnabledRef.current });
         setStatus('Connecting your cameras...');
       } catch (reason) {
         if (active) setNotice(reason instanceof Error ? reason.message : 'Could not start the call.');
@@ -445,6 +462,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setRoom(null); setCopied(false); setNotice(''); setStatus('Create a room or open an invite.');
     setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
     setSettingsOpen(false);
+    setPartnerFlashEnabled(null); setFlashActive(false);
     cutoutsRef.current = {}; cutoutsReadyRef.current = false;
     peerCutoutReadyRef.current = false; setPeerCutoutReady(false); setCutoutStatus('off');
     setPeerBackgroundReadyId(null);
@@ -511,6 +529,19 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
   }, [settingsOpen]);
+
+  useEffect(() => {
+    if (connected) send({ kind: 'flash', enabled: flashEnabled });
+    // The signal channel remains stable until the room changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, flashEnabled, room]);
+
+  function chooseFlash(enabled: boolean) {
+    if (shootingRef.current) return;
+    flashEnabledRef.current = enabled;
+    setFlashEnabled(enabled);
+    saveFlashPreference('together', enabled);
+  }
 
   function chooseCountdown(value: number) {
     if (![3, 5, 10].includes(value) || shootingRef.current) return;
@@ -654,13 +685,14 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   }, [room, connected, localReady, remoteReady]);
 
   return <section className="live-together" aria-label="Live remote photo booth">
+    {flashActive && <div className="lovebug-screen-flash" aria-hidden="true" />}
     {!supabase && <div className="together-config-note" role="status"><strong>One-time setup needed for live rooms.</strong> Add your Supabase project URL and publishable key to <code>.env.local</code>, then restart Vite. The Photo Letters tab works without it.</div>}
     {!room ? <div className="paper-card live-lobby"><div className="live-lobby-icon">&#9825;</div><h2>A little room for two</h2><p>Create a private-link room, then send the link to your girlfriend. Once both cameras connect, you can capture four combined photos. No microphones, no recording, and no cloud photo upload.</p><button className="pink-button" disabled={!supabase} onClick={createRoom}>create our photo room <span className="button-icon">&#8599;</span></button><small>The link is unlisted, not authenticated. Anyone with it may join. Only share it privately.</small></div> : <>
       <div className="paper-card live-invite"><div><span className="eyebrow">OUR LITTLE ROOM</span><h2>{room.role === 'host' ? 'Invite your favorite person' : 'You joined their room'}</h2><p className="live-status" role="status">{status}</p></div><div className="live-invite-actions"><label htmlFor="live-invite-link">Invite link</label><div className="live-share-row"><input id="live-invite-link" aria-label="Invite link" readOnly value={roomLink(room.id)} onFocus={(event: FocusEvent<HTMLInputElement>) => event.target.select()} /><button className="soft-button" onClick={() => void copyLink()}>{copied ? 'copied!' : 'copy link'}</button></div><button className="plain-button" onClick={leaveRoom}>leave this room</button></div></div>
       <div className={`live-booth-workspace ${settingsOpen ? 'live-adjusting' : ''}`}>
         <div className="paper-card live-main-preview">
           <div className="live-stage-header">
-            <div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame is the whole photo. No hidden portrait crop after the countdown.</p></div>
+            <div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame shows the full combined photo; the dotted center area is what fits on the final strip. You can reframe each shot afterward.</p></div>
             <div className="live-stage-actions">
               <label className="together-toggle"><input type="checkbox" checked={showGuides} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowGuides(event.target.checked)} /> Show composition guides</label>
               <button type="button" className="live-adjust-trigger" aria-controls="live-adjust-panel" aria-expanded={settingsOpen} onClick={openAdjustments}>
@@ -671,6 +703,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
           <div className="live-stage-frame" ref={previewFrameRef}><canvas ref={previewCanvasRef} width={660} height={495} aria-label="Live preview of the exact combined photo, including the chosen crop and mirrors" role="img" />
             {(!connected || !remoteReady || !localReady) && <div className="live-stage-waiting">{peerPresent ? 'Joining your cameras into one photo...' : 'Waiting for your favorite person to join...'}</div>}
             {showGuides && connected && remoteReady && <div className="live-stage-guides" aria-hidden="true"><span>your shared photo</span></div>}
+            {showGuides && connected && remoteReady && <div className="live-strip-guide" aria-hidden="true"><span>this center crop fits the final photo strip</span></div>}
             {count !== null && <div className="live-count-overlay" aria-label={`Taking photo in ${count}`}>{count}</div>}
           </div>
           {virtualEnabled && <div className="together-cutout-status" role="status" data-state={cutoutStatus}>
@@ -685,6 +718,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
           {composition.backdrop === 'custom' && !customSceneReady && <p className="together-cutout-status" data-state="loading" role="status">
             {customImage ? 'Sharing the custom background with your lovebug’s phone…' : 'Receiving the custom background photo from your lovebug…'}
           </p>}
+          <label className="live-flash-choice"><input type="checkbox" checked={flashEnabled} disabled={shooting} onChange={event => chooseFlash(event.target.checked)}/><span>Flash MY screen when we take a photo</span><small>{partnerFlashEnabled === null ? 'Your lovebug chooses on their own phone.' : `Your lovebug's screen flash: ${partnerFlashEnabled ? 'on' : 'off'}.`}</small></label>
           <div className="live-shoot-row live-preview-shoot">
             <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting || !customSceneReady || (virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady))} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
             <span>{room.role === 'guest' ? 'Your partner starts the countdown.' : virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady) ? 'Preparing the shared scene on both devices.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span>

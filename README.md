@@ -127,3 +127,7 @@ and upload a background (JPEG, PNG or WebP, up to 10 MB); it travels only throug
 the existing WebRTC data channel and is not saved to Supabase. The host still
 starts the actual four-photo countdown. Personal backgrounds can also be used
 in Photo Letters. See [shared backgrounds](docs/SHARED_VIRTUAL_BACKGROUNDS.md).
+
+### v0.3.5: Photo improvements
+
+The solo camera marks the **actual film-strip crop** before capture, and the Review step lets you reframe any shot vertically before decorating. The Doodles palette supports an eraser that only removes doodle paths. Photo Letters previews each of four pairs and allows per-pair adjustment or replacement. Solo and Live Together cameras have an optional **screen** flash; in Live Together each lovebug chooses independently on their own device (default off). This does not turn on the hardware LED flash.

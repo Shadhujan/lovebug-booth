@@ -83,3 +83,12 @@ See [TOGETHER_APART_SETUP.md](TOGETHER_APART_SETUP.md) for setup, both-phone liv
   background is available on both devices.
 - [x] Use personal background images in offline Photo Letters too.
 - [ ] User-side: test live image transfer and cutout capture on two real phones.
+
+## v0.3.5 - Honest framing and playful editing
+
+- [x] Doodles: pen, partial eraser (strokes only), independent eraser width, clear-all and undo/redo.
+- [x] Solo four-shot camera: dashed boundary indicates exactly which center crop fits the film strip, with separate opt-in screen flash.
+- [x] Review: actual strip-sized previews, replace/retake individual frames, and non-destructive up/down reframing for each captured photo.
+- [x] Photo Letters: choose among all four picture pairs, preview each separately, replace one picture, customize framing/background per pair or apply it to all four.
+- [x] Together Apart: independent flash preference on each device. Neither person can activate the other's flash; status is shown for convenience. Only the room creator starts the shared capture.
+- [ ] Verify flashes and mobile framing on real phones. The flash is a brief display effect, not a device LED torch and not a guaranteed improvement to photo exposure.

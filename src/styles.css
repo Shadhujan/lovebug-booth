@@ -181,3 +181,45 @@
 .together-custom-photo-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:2px 0 5px}
 .together-custom-photo-row .soft-button{font-size:11px;min-height:37px;padding:9px 12px}
 .together-custom-photo-row>span{font-size:10px;line-height:1.5;color:#ab8190;flex:1 1 160px}
+
+/* v0.3.5: honest film-strip framing, per-photo adjustments, opt-in screen flash */
+.camera-strip-guide{position:absolute;z-index:1;left:0;right:0;top:50%;height:auto;aspect-ratio:420 / 206;transform:translateY(-50%);border-top:2px dashed #fff7ed;border-bottom:2px dashed #fff7ed;pointer-events:none;box-shadow:0 0 0 100vmax rgba(24,12,20,.27);}
+.camera-strip-guide span{position:absolute;top:8px;left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(255,249,246,.86);color:#af5d78;border-radius:99px;font-size:10px;font-weight:800;white-space:nowrap}
+.camera-count{z-index:2}.camera-flash{z-index:9}.camera-badge{z-index:3}
+.camera-framing-note{font-size:12px;line-height:1.5;color:#a87388;margin:9px 2px 13px}
+.camera-flash-choice,.live-flash-choice{display:flex;align-items:center;gap:9px;flex-wrap:wrap;color:#9c5e76;font-size:12px;font-weight:800;padding:12px 14px;background:#fff0f4;border-radius:15px;margin-bottom:13px;cursor:pointer}
+.camera-flash-choice input,.live-flash-choice input{accent-color:#e97193;width:17px;height:17px}
+.camera-flash-choice small,.live-flash-choice small{font-size:10px;font-weight:500;color:#b78494}
+.review-reframe{display:flex;flex-direction:column;gap:5px;padding:10px 6px 2px;color:#a45e7a;font-size:11px;font-weight:800}
+.review-reframe span{display:flex;justify-content:space-between;gap:10px}.review-reframe small{font-weight:500;color:#be879c}
+.review-reframe input{width:100%;accent-color:#e9799d}
+
+/* v0.3.5: doodle tools */
+.doodle-tool-choices{display:flex;gap:7px;margin:11px 0 13px}
+.doodle-tool-choices button{flex:1;padding:10px 12px;border:1px solid #f2c2d0;border-radius:13px;background:#fff8f9;color:#a9607d;font-size:12px;font-weight:800}
+.doodle-tool-choices button.active{background:#f9d8e2;border-color:#e985a5;color:#9c4468}
+.doodle-bottom-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+.doodle-bottom-actions button{flex:1;min-width:125px}
+
+/* v0.3.5: the flash is opt-in for each device, never remotely forced */
+.lovebug-screen-flash{position:fixed;inset:0;z-index:120;background:rgba(255,255,255,.97);pointer-events:none}
+
+/* v0.3.5: choose and edit each of the four Photo Letters pairs */
+.letter-previews>button{height:125px;overflow:hidden;border:5px solid #fff;background:#faebf0;box-shadow:0 3px 9px #dba3b248;display:grid;place-items:center;color:#d5a3b4;font-weight:900;font-size:20px;border-radius:8px;padding:0;min-width:0}
+.letter-previews>button.active{outline:2px solid #dc7b9b;outline-offset:2px}
+.letter-previews>button img{width:100%;height:100%;object-fit:cover}
+.letter-pair-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:19px 0}
+.letter-pair-picker>button{min-width:0;border:1px solid #f1c7d0;background:#fff9f9;border-radius:14px;padding:9px;color:#ac6c82}
+.letter-pair-picker>button.active{border-color:#e56e98;box-shadow:0 0 0 2px #f9cedd;background:#ffecf2}
+.letter-pair-picker>button strong{display:block;font-size:12px;margin-bottom:7px}
+.letter-pair-pictures{display:flex;height:67px;gap:4px}
+.letter-pair-pictures img,.letter-pair-pictures>span{width:50%;height:100%;object-fit:cover;border-radius:7px;background:#f8e2e8;display:grid;place-items:center;font-size:10px;color:#b98999}
+.letter-edit-pair-heading{padding:12px 14px;background:#fff2f5;border:1px dashed #edc5d0;border-radius:15px;margin-bottom:15px}
+.letter-edit-pair-heading strong{font-size:14px;color:#964c6d}.letter-edit-pair-heading p{font-size:12px;color:#a87587;margin:5px 0 12px}
+.letter-edit-pair-actions{display:flex;gap:8px;flex-wrap:wrap}.letter-edit-pair-actions button{font-size:11px;padding:9px 12px}
+@media(max-width:760px){.letter-previews>button{height:83px}.letter-pair-pictures{height:47px}.letter-pair-picker{gap:5px}.letter-pair-picker>button{padding:6px}.letter-edit-pair-actions button{flex:1;min-width:120px}}
+
+/* Live Together: full combined preview stays the same size; dotted lines mark the final strip crop. */
+.live-strip-guide{position:absolute;z-index:2;left:0;right:0;top:50%;aspect-ratio:420 / 206;transform:translateY(-50%);border-top:2px dashed rgba(255,255,255,.93);border-bottom:2px dashed rgba(255,255,255,.93);pointer-events:none;box-shadow:0 0 0 100vmax rgba(31,15,33,.1)}
+.live-strip-guide span{position:absolute;left:50%;top:8px;transform:translateX(-50%);color:#914f72;background:#fff8fae8;border-radius:99px;padding:4px 9px;font-size:10px;font-weight:800;white-space:nowrap}
+@media(max-width:600px){.live-strip-guide span{font-size:8px;padding:2px 6px;top:4px}}

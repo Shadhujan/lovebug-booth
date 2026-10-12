@@ -18,6 +18,8 @@ export type EditorDraft = {
   strokes: DrawStroke[];
   filter: 'none' | 'warm' | 'dreamy' | 'vintage' | 'bw';
   caption: string;
+  /** Each slot's 0=top, 50=center, 100=bottom strip crop. */
+  photoFocusY?: number[];
 };
 export type AlbumEntry = {
   id: string;
@@ -27,4 +29,4 @@ export type AlbumEntry = {
   note: string;
 };
 export type SavedSticker = { id: string; createdAt: number; src: string };
-export type Phase = 'edit' | 'draw';
+export type Phase = 'edit' | 'draw' | 'erase';

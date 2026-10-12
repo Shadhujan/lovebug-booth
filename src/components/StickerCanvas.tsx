@@ -2,6 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef 
 import type { DrawStroke, EditorDraft, Phase, StickerItem, ThemeKey } from '../types';
 import { drawStrip, handleAt, PRINT_HEIGHT, PRINT_WIDTH, stickerAt } from '../lib/canvas';
 import { makeId } from '../lib/themes';
+import { eraseDoodleSegments } from '../lib/eraseDoodles';
 
 export type StickerCanvasHandle = { exportDataURL: () => Promise<string> };
 type Props = {
@@ -14,15 +15,18 @@ type Props = {
   mode: Phase;
   brushColor: string;
   brushSize: number;
+  eraserSize: number;
 };
 
 type Point = { x: number; y: number };
 type DragState = {
-  mode: 'drag' | 'rotate' | 'resize' | 'draw' | 'pinch';
+  mode: 'drag' | 'rotate' | 'resize' | 'draw' | 'erase' | 'pinch';
   start: Point;
   item?: StickerItem;
   draft: EditorDraft;
   drawing?: DrawStroke;
+  changed?: boolean;
+  last?: Point;
   pointerCount?: number;
   initialDistance?: number;
   initialAngle?: number;
@@ -102,6 +106,16 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
     activePointers.current.set(event.pointerId, point);
     event.currentTarget.setPointerCapture(event.pointerId);
     const p = propsRef.current;
+    if (p.mode === 'erase') {
+      const draft = copyDraft(p.draft);
+      const next = eraseDoodleSegments(draft.strokes, point, point, p.eraserSize);
+      const changed = next !== draft.strokes;
+      draft.strokes = next;
+      stateRef.current = { mode: 'erase', start: point, last: point, draft, changed };
+      transientRef.current = { draft, line: null };
+      render(draft, null);
+      return;
+    }
     if (p.mode === 'draw') {
       const stroke: DrawStroke = { id: makeId(), color: p.brushColor, width: p.brushSize, points: [point] };
       stateRef.current = { mode: 'draw', start: point, draft: copyDraft(p.draft), drawing: stroke };
@@ -141,6 +155,14 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
     activePointers.current.set(event.pointerId, point);
     const state = stateRef.current;
     if (!state) return;
+    if (state.mode === 'erase') {
+      const next = eraseDoodleSegments(state.draft.strokes, state.last ?? state.start, point, propsRef.current.eraserSize);
+      if (next !== state.draft.strokes) { state.draft.strokes = next; state.changed = true; }
+      state.last = point;
+      transientRef.current = { draft: state.draft, line: null };
+      render(state.draft, null);
+      return;
+    }
     if (state.mode === 'draw' && state.drawing) {
       state.drawing.points.push(point);
       transientRef.current = { draft: state.draft, line: state.drawing };
@@ -186,7 +208,7 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
       if (state.drawing.points.length === 1) state.drawing.points.push({ ...state.drawing.points[0] });
       state.draft.strokes.push(state.drawing);
     }
-    if (state.mode === 'draw' || (state.item && transientRef.current)) propsRef.current.onCommit(state.draft);
+    if (state.mode === 'draw' || (state.mode === 'erase' && state.changed) || (state.item && transientRef.current)) propsRef.current.onCommit(state.draft);
     stateRef.current = null; transientRef.current = null;
     render(state.draft);
   };
@@ -198,14 +220,14 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
         className="editor-canvas"
         width={PRINT_WIDTH}
         height={PRINT_HEIGHT}
-        aria-label={props.mode === 'draw' ? 'Draw on the photo strip' : 'Drag stickers or use the round handles to rotate and resize them'}
+        aria-label={props.mode === 'draw' ? 'Draw on the photo strip' : props.mode === 'erase' ? 'Erase part of your doodles with finger or mouse' : 'Drag stickers or use the round handles to rotate and resize them'}
         role="img"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={stopPointer}
         onPointerCancel={stopPointer}
         onContextMenu={event => event.preventDefault()}
-        style={{ touchAction: 'none', cursor: props.mode === 'draw' ? 'crosshair' : 'grab' }}
+        style={{ touchAction: 'none', cursor: props.mode === 'draw' ? 'crosshair' : props.mode === 'erase' ? 'cell' : 'grab' }}
       />
     </div>
   );

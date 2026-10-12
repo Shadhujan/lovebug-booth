@@ -320,29 +320,32 @@ export function captureLivePair(
 export async function composePhotoLetters(
   yours: (string | null)[],
   partner: (string | null)[],
-  composition: TogetherComposition,
+  composition: TogetherComposition | TogetherComposition[],
 ): Promise<string[]> {
   if (!completePhotoSet(yours) || !completePhotoSet(partner)) throw new Error('Both photo letters need four pictures.');
   const pairs = await Promise.all(yours.map(async (photo, index) => [await loadImage(photo), await loadImage(partner[index])] as const));
-  if (composition.backdrop === 'custom' && !getCustomBackground(composition.customBackgroundId)) {
+  const settings = Array.isArray(composition) ? composition : [composition, composition, composition, composition];
+  if (settings.length !== 4) throw new Error('Every photo pair needs a framing choice.');
+  if (settings.some(item => item.backdrop === 'custom' && !getCustomBackground(item.customBackgroundId))) {
     throw new Error('Upload your custom background again before combining these photos.');
   }
-  const processor = composition.backdrop === 'original' ? null
+  const processor = settings.every(item => item.backdrop === 'original') ? null
     : await (await import('./personCutout')).PersonCutoutProcessor.create('IMAGE');
   try {
     const combined: string[] = [];
-    for (const [mine, theirs] of pairs) {
+    for (const [index, [mine, theirs]] of pairs.entries()) {
+    const choice = settings[index];
     const canvas = document.createElement('canvas');
     canvas.width = TOGETHER_WIDTH;
     canvas.height = TOGETHER_HEIGHT;
-    const cutouts: TogetherCutouts | undefined = processor ? {
+    const cutouts: TogetherCutouts | undefined = processor && choice.backdrop !== 'original' ? {
       host: processor.cutout(mine, mine.naturalWidth, mine.naturalHeight),
       guest: processor.cutout(theirs, theirs.naturalWidth, theirs.naturalHeight),
     } : undefined;
     drawTogetherFrame(canvas,
       { image: mine, width: mine.naturalWidth, height: mine.naturalHeight },
       { image: theirs, width: theirs.naturalWidth, height: theirs.naturalHeight },
-      composition, undefined, cutouts,
+      choice, undefined, cutouts,
     );
     combined.push(canvas.toDataURL('image/jpeg', 0.90));
     // Let the browser update its loading state on slower Android devices.
