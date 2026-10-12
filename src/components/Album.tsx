@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
+import CloudAlbumV6 from './CloudAlbumV6';
 import { makeLocalBackup } from '../lib/localBackup';
 import { clearLocalMemories, deleteStrip, downloadBlob, listCustomStickers, listStrips } from '../lib/storage';
 import type { AlbumEntry } from '../types';
 
 type Props = { onHome: () => void; onNew: () => void };
 type Card = { entry: AlbumEntry; url: string };
+const CLOUD_ENABLED = import.meta.env.VITE_LOVEBUG_CLOUD_ENABLED === 'true';
 
 export default function Album({ onHome, onNew }: Props) {
   const [cards, setCards] = useState<Card[]>([]);
+  const [showCloud, setShowCloud] = useState(() => CLOUD_ENABLED && new URLSearchParams(window.location.search).has('album'));
+  const switchAlbum = (cloud: boolean) => {
+    setShowCloud(cloud);
+    const location = new URL(window.location.href);
+    if (cloud) location.searchParams.set('album', '1');
+    else location.searchParams.delete('album');
+    window.history.replaceState(null, '', location.pathname + location.search + location.hash);
+  };
   const [stickerCount, setStickerCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<'backup' | 'clear' | null>(null);
@@ -82,10 +92,16 @@ export default function Album({ onHome, onNew }: Props) {
     <section className="album-privacy-card paper-card" aria-label="Your photo privacy">
       <span aria-hidden="true" className="album-privacy-heart">&#9825;</span>
       <div><strong>Your memories belong to you.</strong>
-        <p>Photos and handmade stickers saved here stay in this browser. They are not uploaded to a cloud album. Clearing browser data, changing browsers, or losing this device can erase them, so download your favorites.</p>
+        <p>Photos kept on this device stay in this browser and never upload automatically. Online saving is optional and requires your explicit choice. Clearing browser data, switching browsers, or losing the device can erase local photos, so download your favorites.</p>
       </div>
     </section>
 
+    {CLOUD_ENABLED && <div className="album-destination-switch" role="group" aria-label="Choose where to view memories">
+      <button type="button" aria-pressed={!showCloud} className={!showCloud ? 'selected' : ''} onClick={() => switchAlbum(false)}>♡ on this device <small>no account required</small></button>
+      <button type="button" aria-pressed={showCloud} className={showCloud ? 'selected' : ''} onClick={() => switchAlbum(true)}>✿ private cloud <small>optional Google sign-in</small></button>
+    </div>}
+
+    {showCloud ? <CloudAlbumV6 localCards={cards} /> : <>
     <section className="album-backup-card paper-card" aria-label="Manage local memories">
       <div className="album-backup-intro">
         <div><div className="eyebrow">A LITTLE BACKUP, JUST IN CASE</div><h2>Keep the good ones safe.</h2><p>Download your saved photo strips and custom stickers together as a ZIP. The backup stays with you; it isn't sent to us.</p></div>
@@ -108,5 +124,6 @@ export default function Album({ onHome, onNew }: Props) {
       <div className="album-card-label"><strong>our little moment &#9825;</strong><small>{new Date(entry.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</small></div>
       <div className="album-card-actions"><button onClick={() => downloadBlob(entry.image, `lovebug-${entry.id.slice(0, 8)}.png`)}>↓ download</button><button onClick={() => void remove({ entry, url })}>remove</button></div>
     </article>)}</div> : <div className="empty-album paper-card"><img src="/stickers/envelope.svg" alt=""/><h2>Our album is waiting for us.</h2><p>No saved photos here just yet. That means it's time to make some!</p><button className="pink-button" onClick={onNew}>take our first strip <span className="button-icon">&#9829;</span></button></div>}
+    </>}
   </main>;
 }
