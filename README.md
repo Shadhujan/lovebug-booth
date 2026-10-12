@@ -166,3 +166,8 @@ On the review screen, drag any captured photo within its exact final strip crop.
 ### v0.4 - Our shared private album
 
 Historical v0.4 code: a single-couple opt-in shared album was prototyped with Supabase Auth/RLS/Storage, but its UI was deliberately **hidden in v0.4.1** pending a multi-user privacy redesign. Local photos never upload automatically. For the current secure Live Together rooms, see [Secure Live Rooms](docs/SECURE_LIVE_ROOMS.md).
+
+
+### v0.6.2: Simple albums and room recovery
+
+See [Room recovery and simple albums](docs/CLOUD_ALBUM_V062_AND_ROOM_RECOVERY.md) for the non-destructive SQL migration, protected whole-album deletion endpoint, and mandatory two-device regression checklist.

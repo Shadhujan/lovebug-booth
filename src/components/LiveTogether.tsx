@@ -19,7 +19,6 @@ const sleep = (ms: number) => new Promise<void>(resolve => window.setTimeout(res
 
 type Room = { id: string; role: 'host' | 'guest'; mode: LiveRoomMode };
 type LobbyState = 'choose' | 'checking' | 'join' | 'waiting' | 'ended';
-type Presence = { id: string; role: 'host' | 'guest' };
 type SceneRevision = { tick: number; by: string };
 const isRevision = (value: unknown): value is SceneRevision => {
   if (!value || typeof value !== 'object') return false;
@@ -33,7 +32,8 @@ const later = (next: SceneRevision, current: SceneRevision) =>
 type Message = {
   from: string;
   to?: string;
-  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready' | 'timer' | 'flash';
+  role?: 'host' | 'guest';
+  kind: 'hello' | 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready' | 'timer' | 'flash';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   composition?: TogetherComposition;
@@ -51,7 +51,7 @@ const supabase = liveRoomClient;
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<Message>;
-  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready', 'timer', 'flash'].includes(data.kind ?? '');
+  return typeof data.from === 'string' && ['hello', 'offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready', 'timer', 'flash'].includes(data.kind ?? '');
 }
 
 export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum, onHome }: Props) {
@@ -80,6 +80,8 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   });
   const [localReady, setLocalReady] = useState(false);
   const [peerPresent, setPeerPresent] = useState(false);
+  const [peerJoinNotice, setPeerJoinNotice] = useState(false);
+  const peerJoinShownRef = useRef(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [count, setCount] = useState<number | null>(null);
@@ -496,7 +498,8 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     const operation = ++operationRef.current;
     connectedRef.current = false;
     setLocalReady(false); setRemoteReady(false); setConnected(false);
-    setPeerPresent(false); setShots([]); setShotCount(0); setNotice('');
+    setPeerPresent(false); setPeerJoinNotice(false); peerJoinShownRef.current = false;
+    setShots([]); setShotCount(0); setNotice('');
     setPartnerFlashEnabled(null); setFlashActive(false);
     setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
     setPeerBackgroundReadyId(null);
@@ -662,6 +665,21 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     async function acceptMessage(raw: unknown) {
       if (!active || !isMessage(raw)) return;
       if (raw.from === clientId || (raw.to && raw.to !== clientId)) return;
+      if (raw.kind === 'hello') {
+        // The room's private broadcast is RLS-authorized for approved members.
+        // Use it for discovery rather than Supabase Presence, which can fail
+        // independently of Broadcast and previously stranded both cameras.
+        if (raw.role === joinedRoom.role || (raw.role !== 'host' && raw.role !== 'guest')) return;
+        if (otherIdRef.current && otherIdRef.current !== raw.from) return;
+        lastPeerHelloAt = Date.now();
+        setPeerPresent(true);
+        if (!peerJoinShownRef.current) {
+          peerJoinShownRef.current = true;
+          setPeerJoinNotice(true);
+        }
+        if (joinedRoom.role === 'host' && !offeredRef.current) void makeOffer(raw.from);
+        return;
+      }
       if (otherIdRef.current && otherIdRef.current !== raw.from) return;
       if (raw.kind === 'flash') {
         if (typeof raw.enabled === 'boolean') setPartnerFlashEnabled(raw.enabled);
@@ -745,23 +763,28 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
       }
     }
 
-    function presenceSync(channel: RealtimeChannel) {
-      const state = channel.presenceState();
-      const people: Presence[] = Object.values(state).flatMap(items => items).flatMap(value => {
-        const item = value as unknown as Partial<Presence>;
-        return typeof item.id === 'string' && (item.role === 'host' || item.role === 'guest')
-          ? [{ id: item.id, role: item.role } as Presence] : [];
-      });
-      const others = people.filter(item => item.id !== clientId);
-      if (others.length > 1) { setNotice('This room is for two. Please create another invite.'); return; }
-      const opposite = others.find(item => item.role !== joinedRoom.role);
-      setPeerPresent(Boolean(opposite));
-      if (!opposite) {
-        if (otherIdRef.current) disconnectPeer();
-        setStatus('Waiting for your favorite person to join...');
-      } else if (joinedRoom.role === 'host' && !offeredRef.current) {
-        void makeOffer(opposite.id);
-      }
+    // Small hello messages are sent through the SAME private, approved-member
+    // Broadcast channel as camera signaling. The server still enforces the
+    // two-person room limit; no separate public discovery channel is created.
+    let helloInterval: number | null = null;
+    let lastPeerHelloAt = 0;
+    function sendHello() { publish({ kind: 'hello', role: joinedRoom.role }); }
+    function startPeerDiscovery() {
+      if (helloInterval !== null) window.clearInterval(helloInterval);
+      sendHello();
+      helloInterval = window.setInterval(() => {
+        if (!active) return;
+        if (lastPeerHelloAt > 0 && Date.now() - lastPeerHelloAt > 30_000
+            && peerRef.current?.connectionState !== 'connected') {
+          // Mobile background tabs can throttle timers. Never close a healthy
+          // peer connection just because its hello broadcast was delayed.
+          lastPeerHelloAt = 0;
+          setPeerPresent(false);
+          if (otherIdRef.current) disconnectPeer();
+          setStatus('Waiting for your favorite person to join...');
+        }
+        sendHello();
+      }, 2500);
     }
 
     async function connect() {
@@ -797,24 +820,29 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
       }
       setLocalReady(true); setStatus('Joining your little room...');
       const channel = supabase!.channel(`lovebug-secure:${joinedRoom.id}`, {
-        config: { broadcast: { ack: false, self: false }, presence: { key: clientId }, private: true },
+        config: { broadcast: { ack: false, self: false }, private: true },
       });
       channelRef.current = channel;
       channel.on('broadcast', { event: 'lovebug' }, ({ payload }) => { void acceptMessage(payload); });
-      channel.on('presence', { event: 'sync' }, () => presenceSync(channel));
-      channel.subscribe(status => {
+      channel.subscribe((status, error) => {
         if (!active) return;
         if (status === 'SUBSCRIBED') {
+          setNotice('');
           setStatus('Waiting for your favorite person to join...');
-          void channel.track({ id: clientId, role: joinedRoom.role }).catch(() => setNotice('Could not join this room. Try reconnecting.'));
+          startPeerDiscovery();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setNotice('Secure signaling failed. Check the v0.5 migration, Realtime RLS and your room approval.');
+          if (helloInterval !== null) { window.clearInterval(helloInterval); helloInterval = null; }
+          // Realtime can recover a lost private channel on its own. Do not
+          // close the room or drop already captured/edited pictures.
+          setNotice(error?.message ? `Secure room connection interrupted: ${error.message}. Retrying…`
+            : 'Secure room connection interrupted. Retrying privately…');
         }
       });
     }
     void connect();
     return () => {
       active = false;
+      if (helloInterval !== null) window.clearInterval(helloInterval);
       connectedRef.current = false;
       operationRef.current++;
       shootingRef.current = false;
@@ -882,7 +910,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     setRoom(null); setInvitationId(null); setLobbyState('choose');
     setRoomPin(null); setPendingGuest(null); setRoomExpires(null); setEnteredPin('');
     setCopied(false); setNotice(message); setStatus('Create a room or open an invite.');
-    setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
+    setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setPeerJoinNotice(false); peerJoinShownRef.current = false; setRemoteReady(false);
     setPhotoStage('camera'); setMineChoice(null); setPartnerChoice(null); setChoiceNoticeDismissed(false); setReviewVersion(0);
     setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false); photosQueuedRef.current = false;
     setPhotoNotice(''); setFinishedImage(''); setIncomingEdit([]);
@@ -1140,6 +1168,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   const showJoinNotice = room?.role === 'host' && Boolean(pendingGuest);
   const showChoiceNotice = !showJoinNotice && Boolean(room) && transportReady && photoStage === 'choice' && partnerChoice === 'shared'
     && mineChoice !== 'shared' && !choiceNoticeDismissed;
+  const showPeerJoinNotice = !showJoinNotice && !showChoiceNotice && !partnerToast && peerJoinNotice && Boolean(room);
   const showEditingNotice = !showJoinNotice && !showChoiceNotice && Boolean(partnerToast)
     && (photoStage === 'shared' || photoStage === 'shared-review'
       || (photoStage === 'finished' && finishedFrom === 'shared'));
@@ -1155,6 +1184,14 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
           <button type="button" className="lovebug-notice-secondary" disabled={roomBusy} onClick={() => void decideGuest(false)}>Decline</button>
         </div>
       </div>
+    </aside>}
+    {showPeerJoinNotice && <aside className="lovebug-room-notice" role="status" aria-label="Partner joined room">
+      <span className="lovebug-room-notice-icon" aria-hidden="true">♡</span>
+      <div className="lovebug-room-notice-content">
+        <strong>Your lovebug is here ♡</strong>
+        <p>Joining both cameras into the same little frame.</p>
+      </div>
+      <button type="button" className="lovebug-notice-close" onClick={() => setPeerJoinNotice(false)} aria-label="Dismiss partner joined notice">×</button>
     </aside>}
     {showChoiceNotice && <aside className="lovebug-room-notice" role="status" aria-label="Partner chose to decorate together">
       <span className="lovebug-room-notice-icon" aria-hidden="true">♡</span>

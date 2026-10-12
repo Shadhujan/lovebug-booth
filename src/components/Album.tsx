@@ -7,14 +7,18 @@ import type { AlbumEntry } from '../types';
 type Props = { onHome: () => void; onNew: () => void };
 type Card = { entry: AlbumEntry; url: string };
 const CLOUD_ENABLED = import.meta.env.VITE_LOVEBUG_CLOUD_ENABLED === 'true';
+type Destination = 'device' | 'personal' | 'shared';
 
 export default function Album({ onHome, onNew }: Props) {
   const [cards, setCards] = useState<Card[]>([]);
-  const [showCloud, setShowCloud] = useState(() => CLOUD_ENABLED && new URLSearchParams(window.location.search).has('album'));
-  const switchAlbum = (cloud: boolean) => {
-    setShowCloud(cloud);
+  const [destination, setDestination] = useState<Destination>(() => {
+    const selected = new URLSearchParams(window.location.search).get('album');
+    return CLOUD_ENABLED && selected ? (selected === 'shared' ? 'shared' : 'personal') : 'device';
+  });
+  const switchAlbum = (next: Destination) => {
+    setDestination(next);
     const location = new URL(window.location.href);
-    if (cloud) location.searchParams.set('album', '1');
+    if (next !== 'device') location.searchParams.set('album', next);
     else location.searchParams.delete('album');
     window.history.replaceState(null, '', location.pathname + location.search + location.hash);
   };
@@ -96,12 +100,13 @@ export default function Album({ onHome, onNew }: Props) {
       </div>
     </section>
 
-    {CLOUD_ENABLED && <div className="album-destination-switch" role="group" aria-label="Choose where to view memories">
-      <button type="button" aria-pressed={!showCloud} className={!showCloud ? 'selected' : ''} onClick={() => switchAlbum(false)}>♡ on this device <small>no account required</small></button>
-      <button type="button" aria-pressed={showCloud} className={showCloud ? 'selected' : ''} onClick={() => switchAlbum(true)}>✿ private cloud <small>optional Google sign-in</small></button>
+    {CLOUD_ENABLED && <div className="album-destination-switch album-destination-simple" role="group" aria-label="Choose your memories">
+      <button type="button" aria-pressed={destination === 'device'} className={destination === 'device' ? 'selected' : ''} onClick={() => switchAlbum('device')}>♡ on this device</button>
+      <button type="button" aria-pressed={destination === 'personal'} className={destination === 'personal' ? 'selected' : ''} onClick={() => switchAlbum('personal')}>✿ private album</button>
+      <button type="button" aria-pressed={destination === 'shared'} className={destination === 'shared' ? 'selected' : ''} onClick={() => switchAlbum('shared')}>♡ our shared album</button>
     </div>}
 
-    {showCloud ? <CloudAlbumV6 localCards={cards} /> : <>
+    {destination !== 'device' ? <CloudAlbumV6 localCards={cards} view={destination} /> : <>
     <section className="album-backup-card paper-card" aria-label="Manage local memories">
       <div className="album-backup-intro">
         <div><div className="eyebrow">A LITTLE BACKUP, JUST IN CASE</div><h2>Keep the good ones safe.</h2><p>Download your saved photo strips and custom stickers together as a ZIP. The backup stays with you; it isn't sent to us.</p></div>

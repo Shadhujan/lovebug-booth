@@ -11,6 +11,7 @@ export type CloudCouple = {
   owner_id: string;
   title: string;
   created_at: string;
+  deleting_at: string | null;
 };
 export type CloudPhoto = {
   id: string;
@@ -40,7 +41,7 @@ export function makeCoupleInvitation(): string {
 
 export async function listCouples(): Promise<CloudCouple[]> {
   const { data, error } = await api().from('lovebug_v6_couples')
-    .select('id,owner_id,title,created_at')
+    .select('id,owner_id,title,created_at,deleting_at')
     .order('created_at', { ascending: false }).limit(20);
   if (error) throw new Error(`Could not load shared albums: ${error.message}`);
   return (data ?? []) as CloudCouple[];
@@ -206,4 +207,31 @@ export async function sharePrivateCloudPhoto(
     if (insertError.code === '23505') throw new Error('This photo is already shared with the selected album.');
     throw new Error(`The photo could not be added to the shared album: ${insertError.message}`);
   }
+}
+
+
+/** Delete the selected two-person album and every shared photo through the
+ * authorized Edge Function. Never delete Storage metadata directly with SQL. */
+export async function deleteSharedCloudAlbum(coupleId: string): Promise<void> {
+  if (!isUuid(coupleId)) throw new Error('Choose a valid shared album.');
+  const client = api();
+  const { data, error } = await client.auth.getSession();
+  if (error || !data.session || data.session.user.is_anonymous) {
+    throw new Error('Sign in with Google before deleting an album.');
+  }
+  const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lovebug-delete-album`;
+  let response: Response;
+  try {
+    response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${data.session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+      },
+      body: JSON.stringify({ album_id: coupleId }),
+    });
+  } catch { throw new Error('Could not reach album deletion. Please try again.'); }
+  const body = await response.json().catch(() => null) as {error?: string; ok?: boolean} | null;
+  if (!response.ok || !body?.ok) throw new Error(body?.error ?? 'Album deletion failed. Please try again.');
 }
