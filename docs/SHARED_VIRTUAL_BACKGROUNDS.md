@@ -72,3 +72,39 @@ A loaded background-removal model does not mean it has recognized both people. T
 - Neither the shared photo dimensions nor the existing mobile adjustment panel were changed.
 
 Test with normal indoor light and a darker room, including the case where one person walks away from their camera. The real Android segmentation quality still needs testing on both devices.
+
+## v0.3.4 — Adjust together and use your own photo
+
+- Both people can now edit the same live composition, including the backdrop,
+  position, size, mirroring, scrapbook border, and countdown. The **most recent
+  change** is shown on both devices; only the room creator starts capture.
+- Tap **Our own photo** or **upload our own background** in the existing adjustment
+  inspector. Choose a JPEG, PNG or WebP (10 MB maximum). The app center-crops
+  and compresses it to a 1200 x 770 JPEG before sending it directly to the
+  other browser over the existing encrypted WebRTC data channel.
+- Backgrounds are kept **in memory only** for this photo date; they are not
+  uploaded to Supabase or stored in the online album. The photo itself is
+  shared with the other participant through WebRTC. Avoid uploading sensitive
+  images into unauthenticated invitation rooms.
+- While the picture is being transferred, the booth temporarily displays the
+  original cameras and disables capture. After both devices receive it, both
+  people should appear in the same selected photo. Person detection and the
+  original-camera fallback still work as before.
+- The same custom-photo selector works in **Photo Letters** on the device doing
+  the merging. Each browser has its own temporary selected background.
+- The host still presses **take four photos together** so both phones share
+  one countdown. The guest can freely adjust the scene before that.
+
+### Two-device acceptance check
+
+1. Join a room on two devices over HTTPS, open Adjust our photo on **both**.
+2. From the guest, select Moonlight Rooftop; confirm the host sees it too.
+3. Change the guest's size and mirror settings; confirm the host sees the same
+   composition. Change a setting from the host and verify the reverse.
+4. Select **Our own photo** from the guest's phone, upload an ordinary JPEG,
+   wait for the transfer to finish, and confirm the same photo on both devices.
+5. Try a photo from the host as well. Confirm both sides see the newest photo.
+6. Start four captures only after both people are detected and the shared
+   background is ready, then compare preview versus exported strip.
+7. Switch to Original cameras. Confirm the live session and solo photo booth
+   still work. Test the upload option in Photo Letters separately.

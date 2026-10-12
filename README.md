@@ -118,3 +118,12 @@ See [Milestones](docs/MILESTONES.md) for the feature roadmap.
 ---
 
 Made for two people and their silly little moments. ♡
+
+### v0.3.4 — A background that's ours ♡
+
+In Live Together, **both lovebugs** can adjust the shared composition and
+countdown. The most recent edit wins. Either person can choose **Our own photo**
+and upload a background (JPEG, PNG or WebP, up to 10 MB); it travels only through
+the existing WebRTC data channel and is not saved to Supabase. The host still
+starts the actual four-photo countdown. Personal backgrounds can also be used
+in Photo Letters. See [shared backgrounds](docs/SHARED_VIRTUAL_BACKGROUNDS.md).

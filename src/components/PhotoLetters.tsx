@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { compressPhoto, loadImage } from '../lib/photos';
 import { completePhotoSet, composePhotoLetters, DEFAULT_COMPOSITION, downloadPhotoLetter, drawTogetherFrame, readPhotoLetter, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
 import TogetherCompositionControls from './TogetherCompositionControls';
+import { createCustomBackground, getCustomBackground } from '../lib/customBackdrop';
 
 type Props = {
   mine: (string | null)[];
@@ -17,6 +18,7 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
   const partnerPicker = useRef<HTMLInputElement>(null);
   const partnerImagesPicker = useRef<HTMLInputElement>(null);
   const [composition, setComposition] = useState<TogetherComposition>(DEFAULT_COMPOSITION);
+  const [customBackgroundPreview, setCustomBackgroundPreview] = useState<string>();
   const previewRef = useRef<HTMLCanvasElement>(null);
   const [firstPair, setFirstPair] = useState<[HTMLImageElement, HTMLImageElement] | null>(null);
   const [previewCutouts, setPreviewCutouts] = useState<TogetherCutouts | null>(null);
@@ -93,6 +95,17 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
     finally { setBusy(false); }
   }
 
+  async function uploadBackground(file: File) {
+    setBusy(true); setError('');
+    try {
+      const saved = await createCustomBackground(file);
+      setCustomBackgroundPreview(saved.dataUrl);
+      setComposition(previous => ({ ...previous, backdrop: 'custom', customBackgroundId: saved.id }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not use that background photo.');
+    } finally { setBusy(false); }
+  }
+
   async function combine() {
     setBusy(true); setError('');
     try { onCombine(await composePhotoLetters(mine, partner, composition)); }
@@ -117,7 +130,9 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
       </article>
     </div>
     <div className="paper-card letter-combine"><div><span className="eyebrow">03 / ONE SWEET PHOTO STRIP</span><h3>Bring your pictures together</h3><p>Adjust the shared framing below. When the first pictures are ready, you can see exactly how they will look together before saving all four.</p></div>
-      <TogetherCompositionControls value={composition} onChange={setComposition} />
+      <TogetherCompositionControls value={composition} onChange={setComposition} onCustomBackground={uploadBackground}
+        customBackgroundPreview={getCustomBackground(composition.customBackgroundId)?.dataUrl ?? customBackgroundPreview}
+        customBackgroundBusy={busy} />
       {virtualEnabled && firstPair && <p className="together-cutout-status" role="status" data-state={cutoutStatus}>{cutoutStatus === 'ready' ? '♡ Your first two photo cutouts are ready.' : cutoutStatus === 'error' ? 'Could not clearly find both people. Choose brighter pictures or Original cameras.' : 'Preparing the people-only preview locally…'}</p>}
       {firstPair && <div className="letter-merged-preview"><div><span className="eyebrow">PREVIEW / FIRST PHOTO</span><p>The other three will be framed in exactly the same way.</p></div><canvas ref={previewRef} width={660} height={495} role="img" aria-label="Preview of the first two photos blended into one shared frame" /></div>}
       <button className="pink-button letter-combine-button" disabled={busy || !mineDone || !partnerDone || (virtualEnabled && cutoutStatus !== 'ready')} onClick={() => void combine()}>{busy ? 'making your memory...' : 'combine our four pictures'} <span className="button-icon">&#9825;</span></button>

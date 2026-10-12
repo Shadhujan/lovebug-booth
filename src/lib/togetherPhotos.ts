@@ -1,17 +1,19 @@
 import { loadImage } from './photos';
+import { CUSTOM_BACKGROUND_ID, getCustomBackground } from './customBackdrop';
 
 export type SceneKey = 'blush' | 'butter' | 'lavender' | 'mint';
-export type BackdropKey = 'original' | 'garden' | 'cafe' | 'beach' | 'moon';
+export type BackdropKey = 'original' | 'garden' | 'cafe' | 'beach' | 'moon' | 'custom';
 export const BACKDROPS: Record<BackdropKey, { name: string; description: string; asset?: string; tint: string }> = {
   original: { name: 'Original cameras', description: 'Keep both real rooms', tint: '#f6d5e2' },
   garden: { name: 'Flower garden', description: 'A date among the flowers', asset: '/backgrounds/garden.svg', tint: '#d9f1e2' },
   cafe: { name: 'Little café', description: 'One cozy table for two', asset: '/backgrounds/cafe.svg', tint: '#f4dacd' },
   beach: { name: 'Sunset beach', description: 'Same sunset, two hearts', asset: '/backgrounds/beach.svg', tint: '#ffe6c5' },
   moon: { name: 'Moonlight rooftop', description: 'Our own starry night', asset: '/backgrounds/moon.svg', tint: '#d5d5ef' },
+  custom: { name: 'Our own photo', description: 'A place that means something to us', tint: '#f9e6ed' },
 };
 const backdropImages = new Map<BackdropKey, HTMLImageElement>();
 export function preloadBackdrop(key: BackdropKey): void {
-  if (key === 'original' || backdropImages.has(key)) return;
+  if (key === 'original' || key === 'custom' || backdropImages.has(key)) return;
   const image = new Image();
   image.src = BACKDROPS[key].asset!;
   backdropImages.set(key, image);
@@ -85,6 +87,7 @@ export type TogetherLayout = 'close' | 'balanced' | 'classic';
 export type TogetherComposition = {
   scene: SceneKey;
   backdrop: BackdropKey;
+  customBackgroundId: string | null;
   scaleHost: number;
   scaleGuest: number;
   swap: boolean;
@@ -98,7 +101,7 @@ export type TogetherComposition = {
 export const TOGETHER_WIDTH = 1100;
 export const TOGETHER_HEIGHT = 825;
 export const DEFAULT_COMPOSITION: TogetherComposition = {
-  scene: 'blush', backdrop: 'original', scaleHost: 100, scaleGuest: 100, swap: false, layout: 'close',
+  scene: 'blush', backdrop: 'original', customBackgroundId: null, scaleHost: 100, scaleGuest: 100, swap: false, layout: 'close',
   mirrorHost: false, mirrorGuest: false,
   focusHost: 50, focusGuest: 50,
 };
@@ -108,6 +111,8 @@ export function isTogetherComposition(value: unknown): value is TogetherComposit
   const item = value as Partial<TogetherComposition>;
   return typeof item.scene === 'string' && Object.prototype.hasOwnProperty.call(SCENES, item.scene)
     && typeof item.backdrop === 'string' && Object.prototype.hasOwnProperty.call(BACKDROPS, item.backdrop)
+    && (item.customBackgroundId === null || (typeof item.customBackgroundId === 'string' && CUSTOM_BACKGROUND_ID.test(item.customBackgroundId)))
+    && (item.backdrop !== 'custom' || item.customBackgroundId !== null)
     && Number.isFinite(item.scaleHost) && item.scaleHost! >= 70 && item.scaleHost! <= 140
     && Number.isFinite(item.scaleGuest) && item.scaleGuest! >= 70 && item.scaleGuest! <= 140
     && (item.layout === 'close' || item.layout === 'balanced' || item.layout === 'classic')
@@ -121,12 +126,13 @@ export type TogetherSource = { image: CanvasImageSource; width: number; height: 
 export type TogetherCutouts = { host: TogetherSource; guest: TogetherSource };
 
 type PhotoArea = { x: number; y: number; w: number; h: number };
-function drawVirtualBackground(ctx: CanvasRenderingContext2D, backdrop: BackdropKey, photo: PhotoArea): void {
+function drawVirtualBackground(ctx: CanvasRenderingContext2D, composition: TogetherComposition, photo: PhotoArea): void {
+  const backdrop = composition.backdrop;
   const chosen = BACKDROPS[backdrop];
   preloadBackdrop(backdrop);
   ctx.fillStyle = chosen.tint;
   ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
-  const image = backdropImages.get(backdrop);
+  const image = backdrop === 'custom' ? getCustomBackground(composition.customBackgroundId)?.image : backdropImages.get(backdrop);
   if (image?.complete && image.naturalWidth) {
     ctx.drawImage(image, photo.x, photo.y, photo.w, photo.h);
   }
@@ -149,7 +155,7 @@ function placePerson(ctx: CanvasRenderingContext2D, subject: TogetherSource, pho
 
 function drawVirtualScene(ctx: CanvasRenderingContext2D, composition: TogetherComposition,
   photo: PhotoArea, cutouts: TogetherCutouts): void {
-  drawVirtualBackground(ctx, composition.backdrop, photo);
+  drawVirtualBackground(ctx, composition, photo);
   const left = composition.swap ? cutouts.guest : cutouts.host;
   const right = composition.swap ? cutouts.host : cutouts.guest;
   const scaleLeft = composition.swap ? composition.scaleGuest : composition.scaleHost;
@@ -318,6 +324,9 @@ export async function composePhotoLetters(
 ): Promise<string[]> {
   if (!completePhotoSet(yours) || !completePhotoSet(partner)) throw new Error('Both photo letters need four pictures.');
   const pairs = await Promise.all(yours.map(async (photo, index) => [await loadImage(photo), await loadImage(partner[index])] as const));
+  if (composition.backdrop === 'custom' && !getCustomBackground(composition.customBackgroundId)) {
+    throw new Error('Upload your custom background again before combining these photos.');
+  }
   const processor = composition.backdrop === 'original' ? null
     : await (await import('./personCutout')).PersonCutoutProcessor.create('IMAGE');
   try {

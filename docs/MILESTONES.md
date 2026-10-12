@@ -72,3 +72,14 @@ This is a just-for-fun couple app with no billing, no analytics tracking, and no
 ## Acceptance check for Together Apart
 
 See [TOGETHER_APART_SETUP.md](TOGETHER_APART_SETUP.md) for setup, both-phone live tests, Photo Letters steps, privacy cautions and network limitations.
+
+## v0.3.4 — Together Apart shared controls and personal scenes
+
+- [x] Both participants edit the live composition; latest edit wins.
+- [x] Shared countdown selection, while the room host still begins the shoot.
+- [x] Upload a personal background in either browser and transfer it through
+  the existing WebRTC data channel, without public cloud storage.
+- [x] Display transfer readiness and keep capture disabled until the shared
+  background is available on both devices.
+- [x] Use personal background images in offline Photo Letters too.
+- [ ] User-side: test live image transfer and cutout capture on two real phones.

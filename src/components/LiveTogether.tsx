@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from '
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
 import TogetherCompositionControls from './TogetherCompositionControls';
+import { BackgroundChannel } from '../lib/backgroundChannel';
+import { createCustomBackground, getCustomBackground } from '../lib/customBackdrop';
 
 const URL_PATTERN = /^[a-f0-9]{32}$/;
 const CLIENT_ID = () => crypto.randomUUID();
@@ -9,13 +11,24 @@ const sleep = (ms: number) => new Promise<void>(resolve => window.setTimeout(res
 
 type Room = { id: string; role: 'host' | 'guest' };
 type Presence = { id: string; role: 'host' | 'guest' };
+type SceneRevision = { tick: number; by: string };
+const isRevision = (value: unknown): value is SceneRevision => {
+  if (!value || typeof value !== 'object') return false;
+  const revision = value as Partial<SceneRevision>;
+  return typeof revision.tick === 'number' && Number.isSafeInteger(revision.tick) && revision.tick >= 0
+    && typeof revision.by === 'string' && revision.by.length <= 48;
+};
+const later = (next: SceneRevision, current: SceneRevision) =>
+  next.tick > current.tick || (next.tick === current.tick && next.by > current.by);
+
 type Message = {
   from: string;
   to?: string;
-  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready';
+  kind: 'offer' | 'answer' | 'ice' | 'scene' | 'shoot' | 'cutout-ready' | 'timer';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   composition?: TogetherComposition;
+  revision?: SceneRevision;
   seconds?: number;
   ready?: boolean;
 };
@@ -43,7 +56,7 @@ function roomLink(id: string): string {
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<Message>;
-  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready'].includes(data.kind ?? '');
+  return typeof data.from === 'string' && ['offer', 'answer', 'ice', 'scene', 'shoot', 'cutout-ready', 'timer'].includes(data.kind ?? '');
 }
 
 export default function LiveTogether({ timer, onCompleted }: Props) {
@@ -53,6 +66,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [showGuides, setShowGuides] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shotTimer, setShotTimer] = useState([3, 5, 10].includes(timer) ? timer : 3);
+  const shotTimerRef = useRef(shotTimer); shotTimerRef.current = shotTimer;
   const [status, setStatus] = useState('Create a room or open the invite from your partner.');
   const [notice, setNotice] = useState('');
   const [localReady, setLocalReady] = useState(false);
@@ -67,6 +81,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [cutoutStatus, setCutoutStatus] = useState<'off' | 'loading' | 'searching' | 'ready' | 'error'>('off');
   const [missingPerson, setMissingPerson] = useState<'host' | 'guest' | null>(null);
   const [peerCutoutReady, setPeerCutoutReady] = useState(false);
+  const [peerBackgroundReadyId, setPeerBackgroundReadyId] = useState<string | null>(null);
+  const [customBackgroundBusy, setCustomBackgroundBusy] = useState(false);
+  const [customBackgroundUpdate, setCustomBackgroundUpdate] = useState(0);
   const virtualEnabled = composition.backdrop !== 'original';
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const compactPreviewRef = useRef<HTMLCanvasElement>(null);
@@ -81,6 +98,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const cutoutsReadyRef = useRef(false);
   const peerCutoutReadyRef = useRef(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
+  const backgroundChannelRef = useRef<BackgroundChannel | null>(null);
+  const sceneClockRef = useRef(0);
+  const appliedSceneRef = useRef<SceneRevision>({ tick: 0, by: '' });
   const channelRef = useRef<RealtimeChannel | null>(null);
   const otherIdRef = useRef<string | null>(null);
   const offeredRef = useRef(false);
@@ -92,6 +112,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const shootingRef = useRef(false);
   const runSequenceRef = useRef<(selected: TogetherComposition, seconds: number) => Promise<void>>(async () => undefined);
   const clientIdRef = useRef(CLIENT_ID());
+  // Reading the in-memory image is safe; no personal picture is stored remotely.
+  void customBackgroundUpdate;
+  const customImage = getCustomBackground(composition.customBackgroundId);
+  const customSceneReady = composition.backdrop !== 'custom' || (Boolean(customImage) && peerBackgroundReadyId === composition.customBackgroundId);
 
   function send(message: Omit<Message, 'from'>) {
     const channel = channelRef.current;
@@ -105,6 +129,11 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     if (shootingRef.current) return;
     if (!localVideoRef.current?.videoWidth || !remoteVideoRef.current?.videoWidth || !connectedRef.current) {
       setNotice('Wait until both camera feeds are connected.'); return;
+    }
+    if (selected.backdrop === 'custom' && (!getCustomBackground(selected.customBackgroundId)
+        || peerBackgroundReadyId !== selected.customBackgroundId)) {
+      setNotice('Wait until both devices receive your custom background photo before taking pictures.');
+      return;
     }
     if (selected.backdrop !== 'original' && (!cutoutsReadyRef.current || !peerCutoutReadyRef.current)) {
       setNotice('We cannot see both people clearly yet. Face the cameras and try brighter lighting, or choose Original cameras.');
@@ -155,6 +184,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setLocalReady(false); setRemoteReady(false); setConnected(false);
     setPeerPresent(false); setShots([]); setShotCount(0); setNotice('');
     setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
+    setPeerBackgroundReadyId(null);
+    appliedSceneRef.current = { tick: 0, by: '' }; sceneClockRef.current = 0;
     setStatus('Asking to use your camera...');
     const clientId = clientIdRef.current;
 
@@ -167,6 +198,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     }
 
     function disconnectPeer() {
+      backgroundChannelRef.current?.close(); backgroundChannelRef.current = null;
+      setPeerBackgroundReadyId(null);
       peerRef.current?.close(); peerRef.current = null;
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
       queuedIceRef.current = [];
@@ -175,12 +208,37 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (active) { connectedRef.current = false; setRemoteReady(false); setConnected(false); }
     }
 
+    function onBackgroundChannel(channel: RTCDataChannel) {
+      const transport = new BackgroundChannel({
+        onOpen: () => {
+          if (appliedSceneRef.current.tick > 0) publish({ kind: 'scene', composition: compositionRef.current, revision: appliedSceneRef.current });
+          const chosen = compositionRef.current.customBackgroundId;
+          if (!chosen) return;
+          if (getCustomBackground(chosen)) { transport.acknowledge(chosen); transport.sendBackground(chosen); }
+          else transport.request(chosen);
+        },
+        onBackground: id => {
+          setCustomBackgroundUpdate(current => current + 1);
+          if (compositionRef.current.backdrop === 'custom' && compositionRef.current.customBackgroundId === id) setNotice('');
+        },
+        onReady: id => setPeerBackgroundReadyId(id),
+        onError: message => setNotice(message),
+      });
+      backgroundChannelRef.current?.close();
+      backgroundChannelRef.current = transport;
+      transport.attach(channel);
+    }
+
     function connectPeer(to: string): RTCPeerConnection {
       if (peerRef.current && otherIdRef.current === to) return peerRef.current;
       disconnectPeer();
       otherIdRef.current = to;
       const connection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       peerRef.current = connection;
+      if (joinedRoom.role === 'host') onBackgroundChannel(connection.createDataChannel('lovebug-background'));
+      else connection.ondatachannel = event => {
+        if (event.channel.label === 'lovebug-background') onBackgroundChannel(event.channel);
+      };
       for (const track of streamRef.current?.getTracks() ?? []) connection.addTrack(track, streamRef.current!);
       connection.ontrack = event => {
         if (!active || !remoteVideoRef.current) return;
@@ -212,6 +270,12 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (!active || !isMessage(raw)) return;
       if (raw.from === clientId || (raw.to && raw.to !== clientId)) return;
       if (otherIdRef.current && otherIdRef.current !== raw.from) return;
+      if (raw.kind === 'timer') {
+        if ([3, 5, 10].includes(raw.seconds ?? -1)) {
+          shotTimerRef.current = raw.seconds!; setShotTimer(raw.seconds!);
+        }
+        return;
+      }
       if (raw.kind === 'cutout-ready') {
         const ready = raw.ready === true;
         peerCutoutReadyRef.current = ready;
@@ -219,7 +283,21 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         return;
       }
       if (raw.kind === 'scene') {
-        if (joinedRoom.role === 'guest' && isTogetherComposition(raw.composition)) { setComposition(raw.composition); compositionRef.current = raw.composition; }
+        if (isTogetherComposition(raw.composition) && isRevision(raw.revision)) {
+          sceneClockRef.current = Math.max(sceneClockRef.current, raw.revision.tick);
+          if (later(raw.revision, appliedSceneRef.current)) {
+            appliedSceneRef.current = raw.revision;
+            const oldBackground = compositionRef.current.customBackgroundId;
+            compositionRef.current = raw.composition;
+            setComposition(raw.composition);
+            if (oldBackground !== raw.composition.customBackgroundId) setPeerBackgroundReadyId(null);
+            const imageId = raw.composition.customBackgroundId;
+            if (raw.composition.backdrop === 'custom' && imageId && oldBackground !== imageId) {
+              if (getCustomBackground(imageId)) backgroundChannelRef.current?.acknowledge(imageId);
+              else backgroundChannelRef.current?.request(imageId);
+            }
+          }
+        }
         return;
       }
       if (raw.kind === 'shoot') {
@@ -261,7 +339,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         publish({ kind: 'offer', to, sdp: pc.localDescription ?? undefined });
-        publish({ kind: 'scene', to, composition: compositionRef.current });
+        publish({ kind: 'scene', to, composition: compositionRef.current, revision: appliedSceneRef.current });
+        publish({ kind: 'timer', to, seconds: shotTimerRef.current });
         setStatus('Connecting your cameras...');
       } catch (reason) {
         if (active) setNotice(reason instanceof Error ? reason.message : 'Could not start the call.');
@@ -368,6 +447,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setSettingsOpen(false);
     cutoutsRef.current = {}; cutoutsReadyRef.current = false;
     peerCutoutReadyRef.current = false; setPeerCutoutReady(false); setCutoutStatus('off');
+    setPeerBackgroundReadyId(null);
   }
 
   async function copyLink() {
@@ -377,13 +457,35 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   }
 
   function selectComposition(value: TogetherComposition) {
-    if (room?.role !== 'host' || shootingRef.current) return;
+    if (!room || shootingRef.current || !isTogetherComposition(value)) return;
+    const previous = compositionRef.current;
     setComposition(value);
     compositionRef.current = value;
+    if (value.customBackgroundId !== previous.customBackgroundId) setPeerBackgroundReadyId(null);
     if (value.backdrop === 'original') {
       peerCutoutReadyRef.current = false; setPeerCutoutReady(false);
     }
-    send({ kind: 'scene', composition: value });
+    const revision = { tick: ++sceneClockRef.current, by: clientIdRef.current };
+    appliedSceneRef.current = revision;
+    send({ kind: 'scene', composition: value, revision });
+    if (value.backdrop === 'custom' && value.customBackgroundId
+        && (previous.customBackgroundId !== value.customBackgroundId || previous.backdrop !== 'custom')) {
+      const transfer = backgroundChannelRef.current;
+      if (getCustomBackground(value.customBackgroundId)) transfer?.sendBackground(value.customBackgroundId);
+      else transfer?.request(value.customBackgroundId);
+    }
+  }
+
+  async function chooseCustomBackground(file: File) {
+    if (shootingRef.current) return;
+    setCustomBackgroundBusy(true); setNotice('');
+    try {
+      const chosen = await createCustomBackground(file);
+      setCustomBackgroundUpdate(current => current + 1);
+      selectComposition({ ...compositionRef.current, backdrop: 'custom', customBackgroundId: chosen.id });
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : 'Could not load that background photo.');
+    } finally { setCustomBackgroundBusy(false); }
   }
 
   function openAdjustments() {
@@ -410,8 +512,15 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     return () => window.removeEventListener('keydown', onEscape);
   }, [settingsOpen]);
 
+  function chooseCountdown(value: number) {
+    if (![3, 5, 10].includes(value) || shootingRef.current) return;
+    shotTimerRef.current = value;
+    setShotTimer(value);
+    send({ kind: 'timer', seconds: value });
+  }
+
   function startSharedShots() {
-    if (!room || room.role !== 'host' || shootingRef.current || !connected || !remoteReady) return;
+    if (!room || room.role !== 'host' || shootingRef.current || !connected || !remoteReady || !customSceneReady) return;
     setSettingsOpen(false);
     const selected = compositionRef.current;
     send({ kind: 'shoot', composition: selected, seconds: shotTimer });
@@ -524,9 +633,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
               room.role === 'guest' ? localSource : remoteSource,
               // While detection is incomplete, show live cameras rather than
               // a misleading empty illustrated scene. Export is still blocked.
-              cutoutsReadyRef.current ? compositionRef.current
-                : { ...compositionRef.current, backdrop: 'original' }, scratch,
-              cutoutsReadyRef.current ? cutoutsRef.current as TogetherCutouts : undefined);
+              cutoutsReadyRef.current && (compositionRef.current.backdrop !== 'custom' || getCustomBackground(compositionRef.current.customBackgroundId))
+                ? compositionRef.current : { ...compositionRef.current, backdrop: 'original' }, scratch,
+              cutoutsReadyRef.current && (compositionRef.current.backdrop !== 'custom' || getCustomBackground(compositionRef.current.customBackgroundId))
+                ? cutoutsRef.current as TogetherCutouts : undefined);
             // The mobile inspector displays a live, reduced-resolution copy
             // of the *same* composited frame. No second cropping algorithm.
             if (settingsOpenRef.current && compactPreviewRef.current) {
@@ -570,10 +680,13 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
                 ? `We can’t clearly find ${missingPerson === (room.role === 'host' ? 'host' : 'guest') ? 'you' : 'your lovebug'} yet. Move into the camera frame and brighten the room. We’re showing the original cameras until both people are visible.`
               : cutoutStatus === 'error' ? 'Person cutouts stopped working. You can continue with Original cameras.'
               : 'Finding both people… Look toward the cameras and keep your head and shoulders inside the frame.'}</span>
-            {room.role === 'host' && (cutoutStatus === 'searching' || cutoutStatus === 'error') && <button type="button" className="cutout-fallback-link" onClick={() => selectComposition({ ...compositionRef.current, backdrop: 'original' })}>Use Original cameras ↗</button>}
+            {(cutoutStatus === 'searching' || cutoutStatus === 'error') && <button type="button" className="cutout-fallback-link" onClick={() => selectComposition({ ...compositionRef.current, backdrop: 'original' })}>Use Original cameras ↗</button>}
           </div>}
+          {composition.backdrop === 'custom' && !customSceneReady && <p className="together-cutout-status" data-state="loading" role="status">
+            {customImage ? 'Sharing the custom background with your lovebug’s phone…' : 'Receiving the custom background photo from your lovebug…'}
+          </p>}
           <div className="live-shoot-row live-preview-shoot">
-            <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting || (virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady))} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
+            <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting || !customSceneReady || (virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady))} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
             <span>{room.role === 'guest' ? 'Your partner starts the countdown.' : virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady) ? 'Preparing the shared scene on both devices.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span>
           </div>
           <div className="live-mini-cameras"><div className="live-mini-camera"><div className="live-camera-label">your camera <span>{localReady ? 'on' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={localVideoRef} autoPlay muted playsInline className={mirrorSelfView ? 'live-local-video' : ''} aria-label="Your private selfie preview" />{!localReady && <span className="live-video-placeholder">waking up...</span>}</div></div><div className="live-mini-camera"><div className="live-camera-label">your lovebug <span>{connected && remoteReady ? 'here with you' : 'waiting'}</span></div><div className="live-video-wrap"><video ref={remoteVideoRef} autoPlay muted playsInline aria-label="Your partner's camera thumbnail" onLoadedMetadata={() => setRemoteReady(true)} />{!remoteReady && <span className="live-video-placeholder">waiting...</span>}</div></div></div>
@@ -585,15 +698,19 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         </div>
         <div id="live-adjust-panel" className={`paper-card live-controls ${settingsOpen ? 'live-controls-open' : ''}`} ref={settingsPanelRef} role="region" aria-label="Together Apart photo adjustments">
           <div className="live-adjust-heading">
-            <div><div className="eyebrow">YOUR LITTLE PHOTO DATE</div><h3><span className="live-adjust-desktop-title">Make this one picture ours</span><span className="live-adjust-mobile-title">Adjust our photo ♡</span></h3><p>Changes appear instantly in your shared photo.</p></div>
+            <div><div className="eyebrow">YOUR LITTLE PHOTO DATE</div><h3><span className="live-adjust-desktop-title">Make this one picture ours</span><span className="live-adjust-mobile-title">Adjust our photo ♡</span></h3><p>Both lovebugs can adjust the shared scene.</p></div>
             <button type="button" className="live-adjust-close" onClick={() => setSettingsOpen(false)} aria-label="Close photo adjustments">done <span aria-hidden="true">×</span></button>
           </div>
           <div className="live-adjust-mini-preview">
             <div className="live-adjust-mini-frame"><canvas ref={compactPreviewRef} width={220} height={165} role="img" aria-label="Live miniature of your exact shared photo" />{(!connected || !remoteReady || !localReady) && <span>your photo appears here ♡</span>}</div>
             <p>Your little photo, live. Adjust below and watch it change.</p>
           </div>
-          <TogetherCompositionControls value={composition} onChange={selectComposition} disabled={room.role !== 'host' || shooting} mineLabel={room.role === 'host' ? 'Your' : "Your lovebug's"} partnerLabel={room.role === 'host' ? "Your lovebug's" : 'Your'} />
-          {room.role === 'host' && <div className="live-timer"><span>Countdown per photo</span><div role="group" aria-label="Choose countdown seconds">{[3,5,10].map(value => <button key={value} className={shotTimer === value ? 'active' : ''} aria-pressed={shotTimer === value} disabled={shooting} onClick={() => setShotTimer(value)}>{value}s</button>)}</div></div>}
+          <TogetherCompositionControls value={composition} onChange={selectComposition} disabled={shooting}
+            mineLabel={room.role === 'host' ? 'Your' : "Your lovebug's"} partnerLabel={room.role === 'host' ? "Your lovebug's" : 'Your'}
+            onCustomBackground={chooseCustomBackground}
+            customBackgroundPreview={getCustomBackground(composition.customBackgroundId)?.dataUrl}
+            customBackgroundBusy={customBackgroundBusy} />
+          <div className="live-timer"><span>Countdown per photo</span><div role="group" aria-label="Choose countdown seconds">{[3,5,10].map(value => <button key={value} className={shotTimer === value ? 'active' : ''} aria-pressed={shotTimer === value} disabled={shooting} onClick={() => chooseCountdown(value)}>{value}s</button>)}</div></div>
           <div className="live-adjust-footer"><button className="soft-button" type="button" onClick={() => setSettingsOpen(false)}>done adjusting ♡</button></div>
         </div>
       </div>

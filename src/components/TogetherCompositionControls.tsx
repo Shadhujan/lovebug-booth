@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react';
+import { useRef, type ChangeEvent } from 'react';
 import { BACKDROPS, SCENES, type TogetherComposition, type TogetherLayout, type SceneKey, type BackdropKey } from '../lib/togetherPhotos';
 
 type Props = {
@@ -7,6 +7,9 @@ type Props = {
   disabled?: boolean;
   mineLabel?: string;
   partnerLabel?: string;
+  onCustomBackground?: (file: File) => void | Promise<void>;
+  customBackgroundPreview?: string;
+  customBackgroundBusy?: boolean;
 };
 
 const LAYOUTS: { id: TogetherLayout; title: string; detail: string }[] = [
@@ -17,7 +20,9 @@ const LAYOUTS: { id: TogetherLayout; title: string; detail: string }[] = [
 
 export default function TogetherCompositionControls({
   value, onChange, disabled = false, mineLabel = 'Your', partnerLabel = 'Your lovebug\'s',
+  onCustomBackground, customBackgroundPreview, customBackgroundBusy = false,
 }: Props) {
+  const customInputRef = useRef<HTMLInputElement>(null);
   const change = (update: Partial<TogetherComposition>) => onChange({ ...value, ...update });
   return <div className="together-composition-settings">
     <div><h4>How close should we look?</h4><p>The preview shows the exact photo framing, not a wider camera view.</p></div>
@@ -30,11 +35,26 @@ export default function TogetherCompositionControls({
     <div className="together-backdrop-options" role="group" aria-label="Our shared background">
       {(Object.entries(BACKDROPS) as [BackdropKey, typeof BACKDROPS[BackdropKey]][]).map(([id, option]) => <button
         key={id} type="button" aria-pressed={value.backdrop === id} className={value.backdrop === id ? 'active' : ''}
-        disabled={disabled} onClick={() => change({ backdrop: id })}>
-        <span className="together-backdrop-image" style={{ backgroundColor: option.tint, backgroundImage: option.asset ? `url(${option.asset})` : undefined }} aria-hidden="true">{id === 'original' ? '♡ + ♡' : null}</span>
-        <strong>{option.name}</strong><small>{option.description}</small>
+        disabled={disabled || customBackgroundBusy} onClick={() => {
+          if (id === 'custom' && !customBackgroundPreview) customInputRef.current?.click();
+          else change({ backdrop: id });
+        }}>
+        <span className="together-backdrop-image" style={{ backgroundColor: option.tint, backgroundImage: id === 'custom' && customBackgroundPreview ? `url(${customBackgroundPreview})` : option.asset ? `url(${option.asset})` : undefined }} aria-hidden="true">{id === 'original' ? '♡ + ♡' : id === 'custom' && !customBackgroundPreview ? '＋' : null}</span>
+        <strong>{option.name}</strong><small>{id === 'custom' && customBackgroundBusy ? 'Preparing your photo…' : option.description}</small>
       </button>)}
     </div>
+    {onCustomBackground && <div className="together-custom-photo-row">
+      <button type="button" className="soft-button" disabled={disabled || customBackgroundBusy} onClick={() => customInputRef.current?.click()}>
+        {customBackgroundPreview ? 'change our background photo ♡' : 'upload our own background ♡'}
+      </button>
+      <span>JPEG, PNG or WebP · max 10 MB · only shared within this photo date</span>
+      <input ref={customInputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp"
+        aria-label="Choose your own shared photo background" onChange={event => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) void onCustomBackground(file);
+        }} />
+    </div>}
     {value.backdrop !== 'original' && <div className="together-scale-grid" aria-label="Person cutout sizes">
       <label><span>{mineLabel} size <output>{value.scaleHost}%</output></span><input type="range" min="70" max="140" step="5" value={value.scaleHost} onChange={event => change({ scaleHost: Number(event.target.value) })} disabled={disabled} /></label>
       <label><span>{partnerLabel} size <output>{value.scaleGuest}%</output></span><input type="range" min="70" max="140" step="5" value={value.scaleGuest} onChange={event => change({ scaleGuest: Number(event.target.value) })} disabled={disabled} /></label>

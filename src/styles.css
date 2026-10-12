@@ -176,3 +176,8 @@
 .cutout-fallback-link{background:#fff9f7;border:1px solid #e6afbc;border-radius:999px;color:#a75a77;padding:7px 11px;font-size:11px;font-weight:800;white-space:normal;cursor:pointer;margin:7px 0 0;display:inline-flex;align-items:center}
 .cutout-fallback-link:hover{background:#ffe6ec}
 .cutout-fallback-link:focus-visible{outline:3px solid #b05f89;outline-offset:3px}
+
+/* A tiny upload action lives inside the existing responsive adjustment inspector. */
+.together-custom-photo-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:2px 0 5px}
+.together-custom-photo-row .soft-button{font-size:11px;min-height:37px;padding:9px 12px}
+.together-custom-photo-row>span{font-size:10px;line-height:1.5;color:#ab8190;flex:1 1 160px}
