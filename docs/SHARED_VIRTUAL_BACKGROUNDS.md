@@ -16,7 +16,7 @@ A virtual-scene option for **Together Apart** (Live Together and Photo Letters).
 
 ## Install, build, deploy
 
-This patch adds one dependency to `package.json`: `@mediapipe/tasks-vision@0.10.22`.
+This patch adds one dependency to `package.json`: `@mediapipe/tasks-vision@1.1.0`.
 
 ```powershell
 # First apply the v0.3 git-am patch (see patch delivery message)
@@ -36,7 +36,7 @@ Your Vercel environment variables are unchanged. No new Supabase tables, migrati
 
 The JavaScript runtime is installed from npm; when first enabling a virtual background the app fetches:
 
-- MediaPipe WASM from the version-pinned jsDelivr CDN (`@mediapipe/tasks-vision@0.10.22`).
+- MediaPipe WASM from the version-pinned jsDelivr CDN (`@mediapipe/tasks-vision@1.1.0`).
 - The official SelfieSegmenter model from Google Cloud Storage (MediaPipe's published model URL).
 
 Camera frames and photos are processed locally **without sending them to these endpoints**. However, the MediaPipe npm privacy notice states its tasks may send usage/performance metrics to Google; evaluate this disclosure before later calling the application fully tracker-free. Model loading requires internet connectivity the first time. This release uses an illustrated, locally hosted SVG for each scene; no Pinterest images are redistributed.
