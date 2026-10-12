@@ -131,3 +131,7 @@ in Photo Letters. See [shared backgrounds](docs/SHARED_VIRTUAL_BACKGROUNDS.md).
 ### v0.3.5: Photo improvements
 
 The solo camera marks the **actual film-strip crop** before capture, and the Review step lets you reframe any shot vertically before decorating. The Doodles palette supports an eraser that only removes doodle paths. Photo Letters previews each of four pairs and allows per-pair adjustment or replacement. Solo and Live Together cameras have an optional **screen** flash; in Live Together each lovebug chooses independently on their own device (default off). This does not turn on the hardware LED flash.
+
+### v0.3.6 - move your photos directly
+
+On the review screen, drag any captured photo within its exact final strip crop. Pinch on a phone, scroll over the photo on desktop, or use the + and - buttons to zoom. The reset button centers only that photo. Keyboard users can focus the preview and use arrow keys, +, -, and 0. Preview and export share the same Canvas crop calculations, so the final strip matches the edited framing. Retaking/replacing a shot resets only that shot's crop.

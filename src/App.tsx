@@ -8,7 +8,8 @@ import Finish from './components/Finish';
 import Album from './components/Album';
 import TogetherApart from './components/TogetherApart';
 import { freshDraft } from './lib/themes';
-import type { EditorDraft, Screen, ThemeKey } from './types';
+import { DEFAULT_PHOTO_FRAMING, normalizePhotoFraming } from './lib/photoFraming';
+import type { EditorDraft, PhotoFraming, Screen, ThemeKey } from './types';
 
 const SAMPLE_PHOTOS = [1,2,3,4].map(n => `/demo/photo-${n}.svg`);
 export default function App() {
@@ -37,6 +38,23 @@ export default function App() {
     setCameraPurpose('letter'); setCombined(false); setPhotos(next); setLetterMine(next); setRetakeIndex(null); setScreen('camera');
   };
   const tryDemo = () => { setCameraPurpose('single'); setCombined(false); setPhotos(SAMPLE_PHOTOS); setRetakeIndex(null); setDraft(freshDraft()); setScreen('review'); };
+  // A new/retaken image gets an untouched crop; all other slots keep their edits.
+  const receivePhotos = (next: (string | null)[]) => {
+    const replaced = next.map((value, index) => value !== photos[index]);
+    setPhotos(next);
+    if (replaced.some(Boolean)) setDraft(current => ({
+      ...current,
+      photoFraming: next.map((_, index) => replaced[index]
+        ? { ...DEFAULT_PHOTO_FRAMING }
+        : normalizePhotoFraming(current.photoFraming?.[index], current.photoFocusY?.[index])),
+    }));
+  };
+  const setFrame = (index: number, framing: PhotoFraming) => setDraft(current => {
+    const next = Array.from({ length: 4 }, (_, slot) => normalizePhotoFraming(current.photoFraming?.[slot], current.photoFocusY?.[slot]));
+    next[index] = framing;
+    return { ...current, photoFraming: next };
+  });
+
 
   return <div className="app-shell">
     <div className="site-stripe" aria-hidden="true" />
@@ -46,8 +64,8 @@ export default function App() {
     </div></header>
     {screen === 'home' && <Home onStart={reset} onAlbum={() => setScreen('album')} onTogether={() => setScreen('together')} />}
     {screen === 'setup' && <Setup theme={theme} setTheme={setTheme} timer={timer} setTimer={setTimer} onCamera={beginCamera} onDemo={tryDemo} onBack={() => setScreen('home')} />}
-    {screen === 'camera' && <CameraBooth timer={timer} photos={photos} retakeIndex={retakeIndex} onPhotos={next => { setPhotos(next); if (cameraPurpose === 'letter') setLetterMine(next); }} onDone={() => { setRetakeIndex(null); setScreen(cameraPurpose === 'letter' ? 'together' : 'review'); }} onBack={() => { setRetakeIndex(null); setScreen(cameraPurpose === 'letter' ? 'together' : photos.some(Boolean) ? 'review' : 'setup'); }} />}
-    {screen === 'review' && <Review photos={photos} onPhotos={setPhotos} readOnly={combined} onRetake={index => { setRetakeIndex(index); setScreen('camera'); }} onEditor={() => setScreen('editor')} photoFocusY={draft.photoFocusY ?? [50,50,50,50]} onFocusY={(index, value) => setDraft(current => { const next = [...(current.photoFocusY ?? [50,50,50,50])]; next[index] = value; return { ...current, photoFocusY: next }; })} onBack={() => setScreen(combined ? 'together' : 'setup')} />}
+    {screen === 'camera' && <CameraBooth timer={timer} photos={photos} retakeIndex={retakeIndex} onPhotos={next => { receivePhotos(next); if (cameraPurpose === 'letter') setLetterMine(next); }} onDone={() => { setRetakeIndex(null); setScreen(cameraPurpose === 'letter' ? 'together' : 'review'); }} onBack={() => { setRetakeIndex(null); setScreen(cameraPurpose === 'letter' ? 'together' : photos.some(Boolean) ? 'review' : 'setup'); }} />}
+    {screen === 'review' && <Review photos={photos} onPhotos={receivePhotos} readOnly={combined} onRetake={index => { setRetakeIndex(index); setScreen('camera'); }} onEditor={() => setScreen('editor')} photoFraming={Array.from({ length: 4 }, (_, index) => normalizePhotoFraming(draft.photoFraming?.[index], draft.photoFocusY?.[index]))} onFraming={setFrame} onBack={() => setScreen(combined ? 'together' : 'setup')} />}
     {screen === 'editor' && <Editor photos={photos} theme={theme} initial={draft} onDraftChange={setDraft} onBack={() => setScreen('review')} onFinish={url => { setImage(url); setScreen('finish'); }} />}
     {screen === 'finish' && <Finish image={image} theme={theme} onAlbum={() => setScreen('album')} onAgain={reset} onBack={() => setScreen('editor')} />}
     {screen === 'together' && <TogetherApart mine={letterMine} partner={letterPartner} onMine={setLetterMine} onPartner={setLetterPartner} onCaptureMine={takeLetter} onCombined={next => { setPhotos(next); setCombined(true); setDraft(freshDraft()); setScreen('review'); }} onBack={() => setScreen('home')} timer={timer} />}

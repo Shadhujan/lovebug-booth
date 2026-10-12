@@ -12,14 +12,17 @@ export type StickerItem = {
   text?: string;
   color?: string;
 };
+export type PhotoFraming = { panX: number; panY: number; zoom: number };
 export type DrawStroke = { id: string; points: { x: number; y: number }[]; color: string; width: number };
 export type EditorDraft = {
   stickers: StickerItem[];
   strokes: DrawStroke[];
   filter: 'none' | 'warm' | 'dreamy' | 'vintage' | 'bw';
   caption: string;
-  /** Each slot's 0=top, 50=center, 100=bottom strip crop. */
+  /** Old v0.3.5 crop positions, retained when opening an older draft. */
   photoFocusY?: number[];
+  /** Drag position (-1..1) and zoom (1..3) saved separately per shot. */
+  photoFraming?: PhotoFraming[];
 };
 export type AlbumEntry = {
   id: string;

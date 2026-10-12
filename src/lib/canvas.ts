@@ -1,5 +1,6 @@
 import type { EditorDraft, StickerItem, ThemeKey } from '../types';
 import { THEMES } from './themes';
+import { drawFramedPhoto, normalizePhotoFraming } from './photoFraming';
 
 export const PRINT_WIDTH = 500;
 export const PRINT_HEIGHT = 1080;
@@ -22,14 +23,6 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
   if (fill) { ctx.fillStyle = fill; ctx.fill(); }
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
-}
-
-function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, focusY = 50) {
-  const iw = img.naturalWidth, ih = img.naturalHeight;
-  if (!iw || !ih) return;
-  const ratio = Math.max(w / iw, h / ih);
-  const scaledW = iw * ratio, scaledH = ih * ratio;
-  ctx.drawImage(img, x + (w - scaledW) / 2, y + (h - scaledH) * Math.max(0, Math.min(100, focusY)) / 100, scaledW, scaledH);
 }
 
 function frameFilter(filter: EditorDraft['filter']) {
@@ -88,7 +81,7 @@ export function drawStrip(ctx: CanvasRenderingContext2D, opts: CanvasRenderOptio
     const img = photos[i] ? images.get(photos[i]!) : null;
     if (img && img.complete && img.naturalWidth) {
       ctx.filter = frameFilter(draft.filter);
-      drawCover(ctx, img, x, y, PHOTO_W, PHOTO_H, draft.photoFocusY?.[i] ?? 50);
+      drawFramedPhoto(ctx, img, x, y, PHOTO_W, PHOTO_H, normalizePhotoFraming(draft.photoFraming?.[i], draft.photoFocusY?.[i] ?? 50));
       ctx.filter = 'none';
     } else {
       ctx.fillStyle = i % 2 ? t.paper : t.highlight;
