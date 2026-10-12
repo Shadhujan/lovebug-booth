@@ -20,6 +20,16 @@ npm run dev
 
 Open `http://localhost:5173` on your laptop. **Try the illustrated demo first** to test the editor without granting camera permission.
 
+### v0.4.1 - Local-first memories (current public behavior)
+
+- Use the normal photo booth, Photo Letters, Sticker Playground, and local album without signing in.
+- Finished strips save to this browser via IndexedDB, not to the cloud.
+- Our Little Album offers an explicit **download all memories** ZIP containing saved strip PNGs, handmade stickers, a metadata file and a README. The ZIP is generated entirely in the browser. It is an export, not a one-click restore/import feature.
+- **Clear saved memories** requires a second confirmation and removes browser-saved strips and handmade stickers together. Neither action removes anything in an existing Supabase project.
+- The v0.4 Supabase shared-album code is retained but **not rendered**. Do not expose the current single-couple SQL schema to public users: future cloud backups require properly isolated albums for every account/couple.
+- Live Together still uses Supabase Realtime signaling with an unlisted room link. Rooms are not authenticated or access-controlled yet. Never describe camera rooms as truly private until the next security milestone.
+- Clearing browser data or changing phones can erase local memories. Download important photos or export your album backup.
+
 ### Together Apart v0.3 (shared virtual worlds)
 
 **New:** choose a Flower garden, Little café, Sunset beach, or Moonlight rooftop. A lazy-loaded MediaPipe selfie segmenter cuts *both* people from the original camera feeds and places them into one shared scene on the device. The existing full-size preview is preserved. Both phones wait for cutout readiness before live capture; Photo Letters can use the same scenes offline from your partner. Original cameras is always available as a reliable fallback. **See [Shared virtual backgrounds](docs/SHARED_VIRTUAL_BACKGROUNDS.md) for setup, privacy limits, and phone tests.**

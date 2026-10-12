@@ -299,3 +299,27 @@
 .cloud-good-news{background:#f1faef;color:#5e8369;border-radius:12px;padding:10px 13px;font-size:12px;margin-top:15px}
 @media(max-width:760px){.cloud-album{padding:18px;margin:12px 0 24px}.cloud-album-symbol{font-size:29px}.cloud-album-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cloud-photo{padding:8px}.cloud-photo-preview{height:172px;min-height:0}.cloud-photo-preview img{max-height:155px}.cloud-album-session{flex-wrap:wrap}.cloud-form-row input{min-width:0}}
 @media(max-width:380px){.cloud-album-header h2{font-size:24px}.cloud-form-row{align-items:stretch;flex-direction:column}.cloud-album-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cloud-photo-preview{height:145px}.cloud-photo-preview img{max-height:132px}}
+
+/* v0.4.1: Local-first album controls; preserve the gallery and scrapbook style. */
+.album-privacy-card{display:flex;align-items:flex-start;gap:16px;padding:20px 23px;margin:18px 0;background:#fff3f5}
+.album-privacy-heart{flex:0 0 39px;height:39px;display:grid;place-items:center;border-radius:13px;background:#f8dae5;color:#cf718f;font-size:24px}
+.album-privacy-card strong{color:#93576e;font-size:15px;display:block;margin:2px 0 5px}
+.album-privacy-card p{margin:0;line-height:1.7;font-size:12px;color:#a17584}
+.album-backup-card{padding:24px;margin:18px 0 30px}
+.album-backup-intro{display:flex;align-items:center;justify-content:space-between;gap:26px}
+.album-backup-intro h2{font-size:23px;margin:5px 0 8px;color:#824a60;letter-spacing:-.6px}
+.album-backup-intro p{font-size:12px;color:#a37b88;line-height:1.7;max-width:490px;margin:0}
+.album-backup-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex-shrink:0}
+.album-backup-actions .soft-button{min-height:45px;padding:10px 17px;font-size:12px}
+.album-clear-button{padding:9px 10px;font-size:12px;color:#a8667c}
+.album-backup-card button:disabled{opacity:.5;cursor:not-allowed}
+.album-clear-confirm{background:#fff2f3;border:1px solid #f3c6d2;border-radius:15px;padding:15px 17px;margin-top:19px;color:#8d5269}
+.album-clear-confirm strong{font-size:13px}
+.album-clear-confirm p{font-size:12px;line-height:1.6;color:#a56b82;margin:7px 0 13px}
+.album-confirm-buttons{display:flex;flex-wrap:wrap;gap:10px}
+.album-confirm-buttons .soft-button{min-height:41px;padding:9px 17px}
+.album-confirm-delete{border:1px solid #d7869b;border-radius:99px;background:#a84f6f;color:#fff;min-height:41px;padding:9px 17px;font-weight:800;font-size:12px}
+.album-confirm-delete:hover:not(:disabled){background:#8f405f}
+.album-success{font-size:12px;line-height:1.6;color:#587b63;background:#eff7ec;padding:10px 14px;border-radius:12px;margin:14px 0 0}
+@media(max-width:800px){.album-backup-intro{flex-direction:column;align-items:flex-start;gap:18px}.album-backup-actions{justify-content:flex-start}}
+@media(max-width:500px){.album-privacy-card{gap:11px;padding:16px}.album-privacy-heart{flex-basis:32px;height:32px;font-size:19px}.album-backup-card{padding:18px}.album-backup-actions{display:grid;grid-template-columns:1fr;width:100%;justify-items:stretch}.album-backup-actions .soft-button{width:100%;white-space:normal}.album-backup-actions .plain-button{justify-self:center}.album-confirm-buttons{display:grid;grid-template-columns:1fr}.album-confirm-buttons button{width:100%}}

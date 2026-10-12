@@ -38,6 +38,19 @@ export const saveCustomSticker = (item: SavedSticker) => withStore('stickers', '
 export const listCustomStickers = () => withStore<SavedSticker[]>('stickers', 'readonly', store => store.getAll());
 export const deleteCustomSticker = (id: string) => withStore('stickers', 'readwrite', store => store.delete(id));
 
+/** Remove saved strips and handmade stickers atomically from this browser only. */
+export async function clearLocalMemories(): Promise<void> {
+  const db = await openDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['strips', 'stickers'], 'readwrite');
+    tx.objectStore('strips').clear();
+    tx.objectStore('stickers').clear();
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onabort = () => { db.close(); reject(tx.error || new Error('Could not clear local memories.')); };
+    tx.onerror = () => { /* onabort handles the failure */ };
+  });
+}
+
 export async function dataUrlToBlob(url: string): Promise<Blob> { return (await fetch(url)).blob(); }
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);

@@ -1,5 +1,7 @@
 # Lovebug Booth v0.4 — Our Private Little World ♡
 
+> **Paused in v0.4.1:** This is a prototype for a single couple, not a safe public multi-user album. The cloud album UI is hidden for the guest-first release. Do not run this migration for a public deployment or invite unrelated users. Enabling optional accounts later requires redesigning the schema for independently isolated user/couple albums. If you already ran this migration or uploaded photos, disabling the UI does not delete the existing cloud records or files.
+
 This milestone adds a two-person shared photo album without changing the working booth or forcing sign-in for local features.
 
 ## What it does

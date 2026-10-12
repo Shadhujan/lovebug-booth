@@ -104,4 +104,16 @@ See [TOGETHER_APART_SETUP.md](TOGETHER_APART_SETUP.md) for setup, both-phone liv
 - [ ] Apply SQL migration and one-time code bootstrap in Supabase Dashboard.
 - [ ] Enable Google Auth and configure redirect URLs. Both partners must sign in and enter the code.
 - [ ] Security-test unauthorized account access and photo reads/writes against the real hosted Supabase project.
-- [ ] v0.4.1: replace unlisted public Realtime live-room channels with member-authenticated private channels.
+- [ ] v0.5: implement secure guest Quick/Locked Rooms with host approval, session expiration and private signaling.
+- [ ] v0.6: replace the one-couple demo database model with a multi-user isolation design before enabling public cloud accounts.
+
+## v0.4.1 - Guest-first and browser-local memories
+
+- [x] Hide the unfinished cloud sign-in/storage feature from the public album, without deleting its implementation.
+- [x] Keep saved photos and handmade cutout stickers in browser IndexedDB.
+- [x] Add a user-triggered ZIP backup with photo strips, handmade stickers and basic metadata. ZIP creation is entirely in the browser and requires no dependencies.
+- [x] Add two-step deletion for both local strips and saved handmade stickers.
+- [x] Explain how browser storage can disappear and that the ZIP is not a restore/import feature.
+- [ ] Validate ZIP download, browser data deletion and mobile layout on a real phone.
+
+**Public launch warning:** Existing Live Together rooms use unlisted public Realtime channels. The archived v0.4 cloud-album SQL supports exactly one couple, NOT multiple unrelated users. Neither subsystem is public multi-user-ready.
