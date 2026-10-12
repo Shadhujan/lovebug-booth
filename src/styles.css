@@ -323,3 +323,30 @@
 .album-success{font-size:12px;line-height:1.6;color:#587b63;background:#eff7ec;padding:10px 14px;border-radius:12px;margin:14px 0 0}
 @media(max-width:800px){.album-backup-intro{flex-direction:column;align-items:flex-start;gap:18px}.album-backup-actions{justify-content:flex-start}}
 @media(max-width:500px){.album-privacy-card{gap:11px;padding:16px}.album-privacy-heart{flex-basis:32px;height:32px;font-size:19px}.album-backup-card{padding:18px}.album-backup-actions{display:grid;grid-template-columns:1fr;width:100%;justify-items:stretch}.album-backup-actions .soft-button{width:100%;white-space:normal}.album-backup-actions .plain-button{justify-self:center}.album-confirm-buttons{display:grid;grid-template-columns:1fr}.album-confirm-buttons button{width:100%}}
+
+/* v0.5: guest-first secure Together Apart lobby; retain existing booth design. */
+.secure-live-lobby{max-width:710px;width:100%;margin-inline:auto}
+.secure-live-lobby .eyebrow{margin:12px 0 4px}
+.secure-room-choices{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:22px 0}
+.secure-room-choices button{display:flex;flex-direction:column;text-align:left;gap:8px;min-width:0;padding:18px;border:1px solid #f0cbd7;background:#fff8fa;border-radius:17px;color:#9b5673;cursor:pointer;transition:background .2s,border-color .2s,box-shadow .2s}
+.secure-room-choices button.selected{border-color:#df7b9f;background:#ffe9f0;box-shadow:0 0 0 2px #f9d3e0 inset}
+.secure-room-choices button:hover{background:#fff0f4}
+.secure-room-choices strong{font-size:15px;color:#8c4b65}
+.secure-room-choices small{font-size:11px;line-height:1.5;color:#ad7b8b}
+.secure-room-choices button:focus-visible,.secure-request-actions button:focus-visible,.secure-pin-entry input:focus-visible{outline:3px solid #d87c9d;outline-offset:2px}
+.secure-live-lobby>.plain-button{margin-top:14px}
+.secure-live-lobby>.error-note{margin:14px 0 0}
+.secure-pin-entry{width:100%;display:flex;flex-direction:column;gap:9px;align-items:flex-start;max-width:320px;margin:18px auto;font-size:13px;font-weight:750;color:#985671;text-align:left}
+.secure-pin-entry input{width:100%;min-height:53px;font-size:24px;letter-spacing:.45em;text-align:center;border:1px solid #ecc4d1;background:#fffbfa;border-radius:13px;color:#7b455e;padding:8px 12px}
+.secure-pin-entry small{font-size:11px;letter-spacing:normal;line-height:1.5;font-weight:450;color:#af7d8c}
+.secure-pin-display{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff0f4;padding:9px 12px;border-radius:12px;color:#a05c75;font-size:12px}
+.secure-pin-display strong{font-size:15px;letter-spacing:.08em;color:#8b4963}
+.secure-pin-display .plain-button{font-size:11px;white-space:nowrap}
+.secure-join-request{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:20px;border:1px solid #ebc0d0;background:#fff1f5;padding:17px;border-radius:15px}
+.secure-join-request strong{font-size:15px;color:#94506e}
+.secure-join-request p{margin:7px 0 0;font-size:12px;line-height:1.5;color:#aa7688}
+.secure-request-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;flex-shrink:0}
+.secure-request-actions .pink-button,.secure-request-actions .soft-button{min-height:44px;font-size:12px;padding:9px 13px}
+@media(max-width:760px){.secure-join-request{flex-direction:column;align-items:flex-start}.secure-request-actions{width:100%}.secure-request-actions button{flex:1}.secure-room-choices{gap:9px}.secure-room-choices button{padding:13px}.secure-room-choices strong{font-size:13px}}
+@media(max-width:380px){.secure-room-choices{grid-template-columns:1fr}.secure-pin-display{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.secure-room-choices button{transition:none}}

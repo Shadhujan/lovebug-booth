@@ -8,6 +8,12 @@ A playful, mobile-first couples photo booth. This is a personal project, not a b
 
 > The concept illustration is a design reference. The actual UI uses responsive HTML/CSS and an interactive Canvas editor, rather than a flattened screenshot.
 
+### v0.5 Secure Together Apart (guest-first)
+
+Live rooms are now **unlisted and server-authorized**: choose a **Quick Room** (link + host approval) or **Locked Room** (link + six-digit PIN + approval). The guest's camera remains off before host approval. Supabase anonymous authentication is used behind the scenes, **not a Google sign-in requirement**. Two participants maximum, 45-minute room expiry, private Realtime signaling protected by server-enforced RLS. No gallery of public rooms and no automatic photo upload.
+
+**Required setup:** [Secure Live Rooms](docs/SECURE_LIVE_ROOMS.md). Run `supabase/migrations/20261012_002_secure_live_rooms.sql`, enable anonymous sign-ins, disable public Realtime channel access, then deploy. Existing unprotected v0.4 invitations will not work on v0.5.
+
 ## Get started (Windows PowerShell)
 
 Prerequisites: Node.js 22.12+ or 24+, npm, Git. The versions you already have (Node 24.16, npm 11.5.2) are suitable.
@@ -27,7 +33,7 @@ Open `http://localhost:5173` on your laptop. **Try the illustrated demo first** 
 - Our Little Album offers an explicit **download all memories** ZIP containing saved strip PNGs, handmade stickers, a metadata file and a README. The ZIP is generated entirely in the browser. It is an export, not a one-click restore/import feature.
 - **Clear saved memories** requires a second confirmation and removes browser-saved strips and handmade stickers together. Neither action removes anything in an existing Supabase project.
 - The v0.4 Supabase shared-album code is retained but **not rendered**. Do not expose the current single-couple SQL schema to public users: future cloud backups require properly isolated albums for every account/couple.
-- Live Together still uses Supabase Realtime signaling with an unlisted room link. Rooms are not authenticated or access-controlled yet. Never describe camera rooms as truly private until the next security milestone.
+- As of v0.5, Live Together uses anonymous guest sessions, host approval, and private Realtime signaling. Follow `docs/SECURE_LIVE_ROOMS.md` for the server setup and its security limitations.
 - Clearing browser data or changing phones can erase local memories. Download important photos or export your album backup.
 
 ### Together Apart v0.3 (shared virtual worlds)
@@ -43,7 +49,7 @@ Two ways to make pictures together while far away:
 - **Live Together (experimental):** two camera feeds in a temporary invite-link room using WebRTC and Supabase Realtime. A single finished-photo preview shows the same crop, blending, mirroring and scrapbook border used in the four captured images. The host can choose Closer Together, Balanced or Classic Split, flip either saved photo, and shift the framing.
 - **Photo Letters:** independent four-photo captures, portable private `.json` photo packs, an editable preview and the same blending/flip/framing modes as live capture, then the normal sticker editor.
 
-The original solo photo booth remains available. The common frame background is a decorative border. Soft merging joins both photos without a hard white gutter, but it cannot remove room backgrounds; person segmentation and a true shared virtual background are planned separately. These experimental room links are **not authenticated private rooms** yet. See the complete setup, phone test steps, privacy limits and TURN relay note in [Together Apart setup](docs/TOGETHER_APART_SETUP.md).
+Historical v0.2 notes: soft blending joins full camera frames without a hard gutter. Newer versions also support local person cutouts and illustrated scenes. The old public, unauthenticated v0.2 rooms are superseded by the server-authorized v0.5 flow. See [Secure Live Rooms](docs/SECURE_LIVE_ROOMS.md).
 
 ### Features in v0.1
 
@@ -101,7 +107,7 @@ The big combined photo stays at the same size. Wide desktop screens show photo c
 
 ### Supabase project
 
-The original solo booth and Photo Letters work without Supabase. **Live Together requires only Supabase Realtime** plus the Project URL and publishable key in `.env.local` (or your deployment environment variables). Do not commit that local file. Room links are unlisted, not authenticated; private albums with verified membership and Storage policies will come later. [Full setup guide](docs/TOGETHER_APART_SETUP.md).
+The original solo booth and Photo Letters work without Supabase. Live Together requires **Supabase Realtime, anonymous guest Auth, and v0.5 room RLS/RPC migration**, plus the existing Project URL and publishable key in `.env.local` or Vercel. Do not commit that local file. Cloud albums stay hidden until a future multi-user rollout. [Full setup guide](docs/SECURE_LIVE_ROOMS.md).
 
 ### Code layout
 
@@ -149,4 +155,4 @@ On the review screen, drag any captured photo within its exact final strip crop.
 
 ### v0.4 - Our shared private album
 
-A separate opt-in cloud album now lets two invited accounts share finished photo strips through Supabase Auth and a private Storage bucket. **Your normal photo booth stays local-first** and never uploads images without an explicit action. First run the SQL migration and follow [Private Shared Album Setup](docs/PRIVATE_SHARED_ALBUM_SETUP.md). Live Together still uses public unlisted room links until the follow-up Realtime security milestone.
+Historical v0.4 code: a single-couple opt-in shared album was prototyped with Supabase Auth/RLS/Storage, but its UI was deliberately **hidden in v0.4.1** pending a multi-user privacy redesign. Local photos never upload automatically. For the current secure Live Together rooms, see [Secure Live Rooms](docs/SECURE_LIVE_ROOMS.md).

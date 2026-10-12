@@ -1,3 +1,13 @@
+## v0.5 — Secure guest-first Live Together
+
+- Quick Room: unlisted invite link + host approval, no login required.
+- Locked Room: add a six-digit PIN before host approval.
+- Server-enforced two-person membership and private Realtime signaling (RLS).
+- 45-minute room expiry, explicit host end, camera off until approved.
+- Existing photo editors, backgrounds and local backups unchanged.
+- **Manual Supabase setup required:** see `docs/SECURE_LIVE_ROOMS.md`.
+- Future: opt-in multi-user private albums, TURN connectivity improvements, public-abuse controls.
+
 # Lovebug Booth - phased implementation
 
 The UI concept is approved. Keep all work mobile-first and verify behavior on a real Android phone, not just desktop resizing.

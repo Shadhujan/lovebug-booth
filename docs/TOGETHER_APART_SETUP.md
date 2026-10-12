@@ -1,3 +1,5 @@
+> **Current v0.5 setup:** This document describes historical v0.2–v0.3 experimental rooms. For the secure public-ready signaling flow, follow **[SECURE_LIVE_ROOMS.md](SECURE_LIVE_ROOMS.md)**. Do not re-enable public Realtime channels based on old instructions below.
+
 # Together Apart v0.2.1 - setup and testing
 
 Two ways to take a photo strip together while living apart:
@@ -29,7 +31,7 @@ npm run dev
    ```
 
 3. Restart `npm run dev` after editing `.env.local`.
-4. In Supabase, verify **Realtime > Settings > Allow public access** is enabled for these experimental public channels. They use the random channel `lovebug-together:<room-id>` and do not require database tables or migrations.
+4. **Obsolete for v0.5:** Do not enable public Realtime access. The secure flow requires the SQL migration and anonymous Auth sign-in described in SECURE_LIVE_ROOMS.md.
 5. **Never** put a database password, `service_role`, `sb_secret`, or a TURN credential in a `VITE_` variable. Never commit `.env.local`.
 
 ## 3. Test with two actual devices

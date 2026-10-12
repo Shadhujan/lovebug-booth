@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
-import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
+import { type RealtimeChannel } from '@supabase/supabase-js';
 import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
 import TogetherCompositionControls from './TogetherCompositionControls';
 import { BackgroundChannel } from '../lib/backgroundChannel';
 import { createCustomBackground, getCustomBackground } from '../lib/customBackdrop';
 import { readFlashPreference, saveFlashPreference } from '../lib/flashPreference';
+import { createLiveRoom, decideLiveRoom, ensureLiveIdentity, getInvitationId, leaveLiveRoom, liveRoomClient, liveRoomInfo, liveRoomStatus, makeLiveRoomLink, newRoomPin, requestLiveRoom, roomResponseMessage, type LiveRoomMode } from '../lib/liveRooms';
 
-const URL_PATTERN = /^[a-f0-9]{32}$/;
 const CLIENT_ID = () => crypto.randomUUID();
 const sleep = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms));
 
-type Room = { id: string; role: 'host' | 'guest' };
+type Room = { id: string; role: 'host' | 'guest'; mode: LiveRoomMode };
+type LobbyState = 'choose' | 'checking' | 'join' | 'waiting' | 'ended';
 type Presence = { id: string; role: 'host' | 'guest' };
 type SceneRevision = { tick: number; by: string };
 const isRevision = (value: unknown): value is SceneRevision => {
@@ -36,24 +37,7 @@ type Message = {
 };
 type Props = { timer: number; onCompleted: (photos: string[]) => void };
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-const supabase = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
-
-function initialRoom(): Room | null {
-  const id = new URLSearchParams(window.location.search).get('together');
-  if (!id || !URL_PATTERN.test(id)) return null;
-  let host = false;
-  try { host = sessionStorage.getItem(`lovebug-host-${id}`) === 'yes'; } catch { /* optional */ }
-  return { id, role: host ? 'host' : 'guest' };
-}
-
-function roomLink(id: string): string {
-  const target = new URL(window.location.href);
-  target.searchParams.set('together', id);
-  target.hash = '';
-  return target.toString();
-}
+const supabase = liveRoomClient;
 
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') return false;
@@ -62,7 +46,17 @@ function isMessage(value: unknown): value is Message {
 }
 
 export default function LiveTogether({ timer, onCompleted }: Props) {
-  const [room, setRoom] = useState<Room | null>(initialRoom);
+  // Only an RPC-approved participant becomes an active room member. Opening
+  // an invite URL never starts a camera or subscribes to signaling.
+  const [room, setRoom] = useState<Room | null>(null);
+  const [invitationId, setInvitationId] = useState<string | null>(getInvitationId);
+  const [lobbyState, setLobbyState] = useState<LobbyState>(getInvitationId() ? 'checking' : 'choose');
+  const [roomMode, setRoomMode] = useState<LiveRoomMode>('quick');
+  const [roomPin, setRoomPin] = useState<string | null>(null);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pendingGuest, setPendingGuest] = useState<string | null>(null);
+  const [roomExpires, setRoomExpires] = useState<string | null>(null);
+  const [roomBusy, setRoomBusy] = useState(false);
   const [composition, setComposition] = useState<TogetherComposition>(DEFAULT_COMPOSITION);
   const [mirrorSelfView, setMirrorSelfView] = useState(true);
   const [showGuides, setShowGuides] = useState(true);
@@ -70,7 +64,11 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [shotTimer, setShotTimer] = useState([3, 5, 10].includes(timer) ? timer : 3);
   const shotTimerRef = useRef(shotTimer); shotTimerRef.current = shotTimer;
   const [status, setStatus] = useState('Create a room or open the invite from your partner.');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => {
+    const rawInvite = new URLSearchParams(window.location.search).get('together');
+    return rawInvite && !getInvitationId()
+      ? 'This invitation was created by an older version of Lovebug Booth. Please make a new secure room link.' : '';
+  });
   const [localReady, setLocalReady] = useState(false);
   const [peerPresent, setPeerPresent] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
@@ -130,6 +128,99 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       setNotice('Could not send the room update. Check your connection.');
     });
   }
+
+  // On the invite screen, only a minimal server-authorized status is fetched.
+  // The guest explicitly requests admission, and camera permissions come later.
+  useEffect(() => {
+    if (!invitationId || room) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const info = await liveRoomInfo(invitationId);
+        if (!active) return;
+        if (info.status !== 'open') {
+          setNotice(roomResponseMessage(info.status)); setLobbyState('ended'); return;
+        }
+        setRoomMode(info.mode === 'locked' ? 'locked' : 'quick');
+        setRoomExpires(info.expires_at ?? null);
+        const membership = await liveRoomStatus(invitationId);
+        if (!active) return;
+        if (membership.status === 'approved' && membership.role) {
+          setRoom({ id: invitationId, role: membership.role, mode: info.mode === 'locked' ? 'locked' : 'quick' });
+          return;
+        }
+        if (membership.status === 'pending') { setLobbyState('waiting'); return; }
+        if (membership.status === 'denied') {
+          setNotice(roomResponseMessage('denied')); setLobbyState('ended'); return;
+        }
+        setLobbyState('join');
+      } catch (reason) {
+        if (active) {
+          setNotice(reason instanceof Error ? reason.message : 'Could not open the invite.');
+          setLobbyState('ended');
+        }
+      }
+    };
+    void load();
+    return () => { active = false; };
+  }, [invitationId, room]);
+
+  // While approval is pending we POLL an authenticated RPC, not a broadcast
+  // lobby that could leak camera offers or connection metadata.
+  useEffect(() => {
+    if (lobbyState !== 'waiting' || !invitationId || room) return;
+    let active = true;
+    let busy = false;
+    const check = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const result = await liveRoomStatus(invitationId);
+        if (!active) return;
+        if (result.status === 'approved' && result.role === 'guest') {
+          setNotice('');
+          setRoom({ id: invitationId, role: 'guest', mode: result.mode === 'locked' ? 'locked' : 'quick' });
+        } else if (result.status === 'denied' || result.status === 'unavailable' || result.status === 'left') {
+          setNotice(roomResponseMessage(result.status === 'left' ? 'unavailable' : result.status));
+          setLobbyState('ended');
+        }
+      } catch { if (active) setNotice('Checking approval... Your camera is still off.'); }
+      finally { busy = false; }
+    };
+    void check();
+    const interval = window.setInterval(() => { void check(); }, 2_000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [lobbyState, invitationId, room]);
+
+  // Re-check room membership and expiry during calls. Realtime checks RLS at
+  // subscription; periodic checks also close honest clients after revocation.
+  useEffect(() => {
+    if (!room) return;
+    const joined = room;
+    let active = true;
+    let checking = false;
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const info = await liveRoomStatus(joined.id);
+        if (!active) return;
+        if (info.status !== 'approved' || info.role !== joined.role) {
+          setRoom(null);
+          setLobbyState('ended');
+          setPendingGuest(null);
+          setNotice('This room ended or your access changed. Start a new room to take more pictures.');
+          return;
+        }
+        setRoomExpires(info.expires_at ?? null);
+        if (joined.role === 'host') setPendingGuest(info.pending_user ?? null);
+      } catch { /* Transient RPC failures do not interrupt an active camera date. */ }
+      finally { checking = false; }
+    };
+    void check();
+    const interval = window.setInterval(() => { void check(); }, 2_500);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [room]);
 
   async function runSequence(selected: TogetherComposition, seconds: number) {
     if (shootingRef.current) return;
@@ -197,7 +288,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setPeerCutoutReady(false); peerCutoutReadyRef.current = false;
     setPeerBackgroundReadyId(null);
     appliedSceneRef.current = { tick: 0, by: '' }; sceneClockRef.current = 0;
-    setStatus('Asking to use your camera...');
+    setStatus('Checking secure room access before opening your camera...');
     const clientId = clientIdRef.current;
 
     function publish(message: Omit<Message, 'from'>) {
@@ -387,6 +478,20 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
         setNotice('Live Together requires a modern browser with WebRTC and HTTPS. Photo Letters still work.'); return;
       }
+      // Defense in depth: verify the guest was approved by the server BEFORE
+      // requesting the camera. The RLS-protected channel checks membership too.
+      try {
+        const token = await ensureLiveIdentity();
+        const access = await liveRoomStatus(joinedRoom.id);
+        if (!active || operation !== operationRef.current) return;
+        if (access.status !== 'approved' || access.role !== joinedRoom.role) {
+          setNotice('You must be approved before joining the camera room.'); return;
+        }
+        supabase!.realtime.setAuth(token);
+      } catch (reason) {
+        if (active) setNotice(reason instanceof Error ? reason.message : 'Could not authorize this room.');
+        return;
+      }
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 20, max: 25 } }, audio: false });
@@ -401,8 +506,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         void localVideoRef.current.play().catch(() => undefined);
       }
       setLocalReady(true); setStatus('Joining your little room...');
-      const channel = supabase!.channel(`lovebug-together:${joinedRoom.id}`, {
-        config: { broadcast: { ack: false, self: false }, presence: { key: clientId }, private: false },
+      const channel = supabase!.channel(`lovebug-secure:${joinedRoom.id}`, {
+        config: { broadcast: { ack: false, self: false }, presence: { key: clientId }, private: true },
       });
       channelRef.current = channel;
       channel.on('broadcast', { event: 'lovebug' }, ({ payload }) => { void acceptMessage(payload); });
@@ -413,7 +518,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
           setStatus('Waiting for your favorite person to join...');
           void channel.track({ id: clientId, role: joinedRoom.role }).catch(() => setNotice('Could not join this room. Try reconnecting.'));
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setNotice('Supabase Realtime could not connect. Confirm the project key and Realtime settings.');
+          setNotice('Secure signaling failed. Check the v0.5 migration, Realtime RLS and your room approval.');
         }
       });
     }
@@ -441,25 +546,58 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     onCompleted(ready);
   }
 
-  function createRoom() {
-    if (!supabase) { setNotice('Connect Supabase first (see docs/TOGETHER_APART_SETUP.md).'); return; }
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    const id = Array.from(bytes, n => n.toString(16).padStart(2, '0')).join('');
-    try { sessionStorage.setItem(`lovebug-host-${id}`, 'yes'); } catch { /* optional */ }
-    window.history.replaceState(null, '', roomLink(id));
-    setCopied(false);
-    setRoom({ id, role: 'host' });
+  async function createRoom() {
+    if (!supabase || roomBusy) { if (!supabase) setNotice('Connect Supabase first (see docs/SECURE_LIVE_ROOMS.md).'); return; }
+    setRoomBusy(true); setNotice('');
+    const selectedMode = roomMode;
+    const pin = selectedMode === 'locked' ? newRoomPin() : null;
+    try {
+      const created = await createLiveRoom(selectedMode, pin);
+      if (created.status !== 'approved' || !created.id) {
+        setNotice(roomResponseMessage(created.status)); return;
+      }
+      const newRoom: Room = { id: created.id, role: 'host', mode: selectedMode };
+      setRoomPin(pin); setRoomExpires(created.expires_at ?? null);
+      setPendingGuest(null); setEnteredPin('');
+      window.history.replaceState(null, '', makeLiveRoomLink(created.id));
+      setCopied(false); setRoom(newRoom);
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not create a room.'); }
+    finally { setRoomBusy(false); }
   }
 
-  function leaveRoom() {
-    if (room) {
-      try { sessionStorage.removeItem(`lovebug-host-${room.id}`); } catch { /* optional */ }
-    }
+  async function askToJoin() {
+    if (!invitationId || roomBusy) return;
+    setRoomBusy(true); setNotice('');
+    try {
+      const result = await requestLiveRoom(invitationId, roomMode === 'locked' ? enteredPin : null);
+      if (result.status === 'pending') setLobbyState('waiting');
+      else if (result.status === 'approved') setRoom({ id: invitationId, role: result.role ?? 'guest', mode: roomMode });
+      else if (result.status === 'unavailable' || result.status === 'denied') {
+        setNotice(roomResponseMessage(result.status)); setLobbyState('ended');
+      } else setNotice(roomResponseMessage(result.status));
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not request access.'); }
+    finally { setRoomBusy(false); }
+  }
+
+  async function decideGuest(approve: boolean) {
+    if (!room || room.role !== 'host' || !pendingGuest || roomBusy) return;
+    setRoomBusy(true); setNotice('');
+    try {
+      const decision = await decideLiveRoom(room.id, pendingGuest, approve);
+      if (decision.status !== (approve ? 'approved' : 'denied')) {
+        setNotice(roomResponseMessage(decision.status));
+      } else { setPendingGuest(null); setStatus(approve ? 'Guest approved. Joining your cameras...' : 'Request declined.'); }
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not answer the request.'); }
+    finally { setRoomBusy(false); }
+  }
+
+  function resetLocalRoom(message = '') {
     const next = new URL(window.location.href);
     next.searchParams.delete('together');
     window.history.replaceState(null, '', next.pathname + next.search + next.hash);
-    setRoom(null); setCopied(false); setNotice(''); setStatus('Create a room or open an invite.');
+    setRoom(null); setInvitationId(null); setLobbyState('choose');
+    setRoomPin(null); setPendingGuest(null); setRoomExpires(null); setEnteredPin('');
+    setCopied(false); setNotice(message); setStatus('Create a room or open an invite.');
     setShots([]); setShotCount(0); setConnected(false); setPeerPresent(false); setRemoteReady(false);
     setSettingsOpen(false);
     setPartnerFlashEnabled(null); setFlashActive(false);
@@ -468,10 +606,24 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     setPeerBackgroundReadyId(null);
   }
 
+  function leaveRoom() {
+    // The room owner explicitly ends it for everyone. An invited guest merely
+    // leaves their seat; the host may approve another guest later.
+    if (room) void leaveLiveRoom(room.id).catch(() => undefined);
+    else if (invitationId && lobbyState === 'waiting') void leaveLiveRoom(invitationId).catch(() => undefined);
+    resetLocalRoom();
+  }
+
   async function copyLink() {
     if (!room) return;
-    try { await navigator.clipboard.writeText(roomLink(room.id)); setCopied(true); }
+    try { await navigator.clipboard.writeText(makeLiveRoomLink(room.id)); setCopied(true); }
     catch { setNotice('Please select the invite link below and copy it manually.'); }
+  }
+
+  async function copyPin() {
+    if (!roomPin) return;
+    try { await navigator.clipboard.writeText(roomPin); setNotice('Room PIN copied. Share it separately from the invite link.'); }
+    catch { setNotice('Select the PIN and copy it manually.'); }
   }
 
   function selectComposition(value: TogetherComposition) {
@@ -687,8 +839,51 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   return <section className="live-together" aria-label="Live remote photo booth">
     {flashActive && <div className="lovebug-screen-flash" aria-hidden="true" />}
     {!supabase && <div className="together-config-note" role="status"><strong>One-time setup needed for live rooms.</strong> Add your Supabase project URL and publishable key to <code>.env.local</code>, then restart Vite. The Photo Letters tab works without it.</div>}
-    {!room ? <div className="paper-card live-lobby"><div className="live-lobby-icon">&#9825;</div><h2>A little room for two</h2><p>Create a private-link room, then send the link to your girlfriend. Once both cameras connect, you can capture four combined photos. No microphones, no recording, and no cloud photo upload.</p><button className="pink-button" disabled={!supabase} onClick={createRoom}>create our photo room <span className="button-icon">&#8599;</span></button><small>The link is unlisted, not authenticated. Anyone with it may join. Only share it privately.</small></div> : <>
-      <div className="paper-card live-invite"><div><span className="eyebrow">OUR LITTLE ROOM</span><h2>{room.role === 'host' ? 'Invite your favorite person' : 'You joined their room'}</h2><p className="live-status" role="status">{status}</p></div><div className="live-invite-actions"><label htmlFor="live-invite-link">Invite link</label><div className="live-share-row"><input id="live-invite-link" aria-label="Invite link" readOnly value={roomLink(room.id)} onFocus={(event: FocusEvent<HTMLInputElement>) => event.target.select()} /><button className="soft-button" onClick={() => void copyLink()}>{copied ? 'copied!' : 'copy link'}</button></div><button className="plain-button" onClick={leaveRoom}>leave this room</button></div></div>
+    {!room ? <div className="paper-card live-lobby secure-live-lobby">
+      <div className="live-lobby-icon" aria-hidden="true">&#9825;</div>
+      {!invitationId ? <>
+        <div className="eyebrow">NO ACCOUNT / JUST THE TWO OF YOU</div>
+        <h2>A little room for two</h2>
+        <p>Create a temporary, unlisted room. Your lovebug must ask to join and you approve them before their camera opens. No searchable rooms and no automatic photo uploads.</p>
+        <div className="secure-room-choices" role="group" aria-label="Room privacy">
+          <button type="button" className={roomMode === 'quick' ? 'selected' : ''} aria-pressed={roomMode === 'quick'} onClick={() => setRoomMode('quick')}>
+            <strong>♡ Quick Room</strong><small>Invite link + your approval. No PIN.</small>
+          </button>
+          <button type="button" className={roomMode === 'locked' ? 'selected' : ''} aria-pressed={roomMode === 'locked'} onClick={() => setRoomMode('locked')}>
+            <strong>♧ Locked Room</strong><small>Invite link + six-digit PIN + approval.</small>
+          </button>
+        </div>
+        <button className="pink-button" disabled={!supabase || roomBusy} onClick={() => void createRoom()}>
+          {roomBusy ? 'making your little room...' : 'create our photo room'} <span className="button-icon">&#8599;</span>
+        </button>
+        <small>Both room types close after 45 minutes, or when the creator leaves. Camera access is always your own choice.</small>
+      </> : <>
+        <div className="eyebrow">ONE LITTLE INVITATION</div>
+        <h2>{lobbyState === 'checking' ? 'Opening your invitation...' : lobbyState === 'waiting' ? 'Waiting for a little yes ♡' : lobbyState === 'ended' ? 'This little date has ended' : `Join a ${roomMode === 'locked' ? 'Locked' : 'Quick'} Room`}</h2>
+        {lobbyState === 'join' && <>
+          <p>Only your partner can approve you. Your camera stays off until they say yes.</p>
+          {roomMode === 'locked' && <label className="secure-pin-entry" htmlFor="secure-live-pin">Six-digit room PIN
+            <input id="secure-live-pin" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6}
+              placeholder="••••••" value={enteredPin} onChange={event => setEnteredPin(event.target.value.replace(/\D/g, '').slice(0, 6))} />
+            <small>Ask the host to send their PIN separately from the invitation link.</small>
+          </label>}
+          <button className="pink-button" disabled={roomBusy || (roomMode === 'locked' && enteredPin.length !== 6)} onClick={() => void askToJoin()}>
+            {roomBusy ? 'asking to join...' : 'ask to join ♡'}
+          </button>
+        </>}
+        {lobbyState === 'checking' && <p role="status">Checking this room securely. No camera permission needed yet.</p>}
+        {lobbyState === 'waiting' && <p role="status">Your request is waiting on your lovebug's screen. You haven't shared your camera yet. Keep this page open.</p>}
+        {lobbyState === 'ended' && <p>Ask the host for a fresh invitation or create a room of your own.</p>}
+        <button className="plain-button" type="button" onClick={leaveRoom}>{lobbyState === 'waiting' ? 'cancel my request' : 'back to room choices'}</button>
+      </>}
+      {notice && <p role="alert" className="error-note">{notice}</p>}
+    </div> : <>
+      <div className="paper-card live-invite"><div><span className="eyebrow">{room.mode === 'locked' ? 'LOCKED LITTLE ROOM' : 'QUICK LITTLE ROOM'}</span><h2>{room.role === 'host' ? 'Invite your favorite person' : 'You joined their room'}</h2><p className="live-status" role="status">{status}</p>{roomExpires && <small>Expires around {new Date(roomExpires).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}. Host can end it sooner.</small>}</div><div className="live-invite-actions"><label htmlFor="live-invite-link">Invite link</label><div className="live-share-row"><input id="live-invite-link" aria-label="Invite link" readOnly value={makeLiveRoomLink(room.id)} onFocus={(event: FocusEvent<HTMLInputElement>) => event.target.select()} /><button className="soft-button" onClick={() => void copyLink()}>{copied ? 'copied!' : 'copy link'}</button></div>{room.role === 'host' && room.mode === 'locked' && <div className="secure-pin-display"><span>Room PIN: <strong>{roomPin ?? 'Not shown after reload'}</strong></span>{roomPin && <button className="plain-button" onClick={() => void copyPin()}>copy PIN</button>}</div>}<button className="plain-button" onClick={leaveRoom}>{room.role === 'host' ? 'end this room for everyone' : 'leave this room'}</button></div>
+        {room.role === 'host' && pendingGuest && <div className="secure-join-request" role="status">
+          <div><strong>♡ Someone wants to join</strong><p>Only approve a person you recognize. Confirm with your partner outside the booth if unsure.</p></div>
+          <div className="secure-request-actions"><button type="button" className="pink-button" disabled={roomBusy} onClick={() => void decideGuest(true)}>approve guest</button><button type="button" className="soft-button" disabled={roomBusy} onClick={() => void decideGuest(false)}>decline</button></div>
+        </div>}
+      </div>
       <div className={`live-booth-workspace ${settingsOpen ? 'live-adjusting' : ''}`}>
         <div className="paper-card live-main-preview">
           <div className="live-stage-header">
@@ -749,6 +944,5 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         </div>
       </div>
     </>}
-    {!room && notice && <p role="alert" className="error-note">{notice}</p>}
   </section>;
 }
