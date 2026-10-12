@@ -1,11 +1,28 @@
 import { isDraftDelta, type DraftDelta } from './sharedDraft';
+import type { StickerItem } from '../types';
+
+/** Transient positioning only: never send image data on pointer moves. */
+export type StickerMotion = Pick<StickerItem, 'id' | 'x' | 'y' | 'width' | 'height' | 'rotation'>;
+
+export function isStickerMotion(value: unknown): value is StickerMotion {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const s = value as Partial<StickerMotion>;
+  const fields = ['id', 'x', 'y', 'width', 'height', 'rotation'];
+  if (Object.keys(value).length !== fields.length || Object.keys(value).some(field => !fields.includes(field))) return false;
+  return typeof s.id === 'string' && s.id.length > 0 && s.id.length <= 90
+    && [s.x, s.y, s.width, s.height, s.rotation].every(v => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 5000)
+    && (s.width ?? 0) > 0 && (s.height ?? 0) > 0;
+}
+
 
 export type PhotoMessage =
   | { kind: 'photos'; photos: string[] }
   | { kind: 'received' }
   | { kind: 'captured' }
   | { kind: 'choice'; choice: 'shared' | 'solo' }
-  | { kind: 'edit'; id: string; delta: DraftDelta };
+  | { kind: 'edit'; id: string; delta: DraftDelta }
+  | { kind: 'gesture'; sticker: StickerMotion | null }
+  | { kind: 'finish-state'; state: 'finished' | 'editing' };
 
 type Packet = { kind: 'begin'; id: string; length: number } | { kind: 'part'; id: string; value: string } | { kind: 'end'; id: string };
 type Incoming = { id: string; length: number; parts: string[]; received: number };
@@ -19,6 +36,8 @@ export function isPhotoMessage(value: unknown): value is PhotoMessage {
   if (m.kind === 'received' || m.kind === 'captured') return true;
   if (m.kind === 'choice') return m.choice === 'shared' || m.choice === 'solo';
   if (m.kind === 'edit') return typeof m.id === 'string' && m.id.length <= 90 && isDraftDelta(m.delta);
+  if (m.kind === 'gesture') return m.sticker === null || isStickerMotion(m.sticker);
+  if (m.kind === 'finish-state') return m.state === 'finished' || m.state === 'editing';
   return false;
 }
 

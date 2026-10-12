@@ -5,8 +5,9 @@ import { makeId, STICKERS, TEXT_IDEAS } from '../lib/themes';
 import { listCustomStickers, saveCustomSticker, deleteCustomSticker } from '../lib/storage';
 import type { EditorDraft, Phase, SavedSticker, StickerItem, ThemeKey } from '../types';
 import { applyDraftDelta, diffDraft, hasDraftChanges, invertDraftDelta, type DraftDelta } from '../lib/sharedDraft';
+import type { StickerMotion } from '../lib/sharedPhotoChannel';
 
-type Props = { photos: (string | null)[]; theme: ThemeKey; initial: EditorDraft; onDraftChange: (draft: EditorDraft) => void; onBack: () => void; onFinish: (result: string) => void; embedded?: boolean; shared?: { incoming?: { sequence: number; delta: DraftDelta }[]; onDelta: (delta: DraftDelta) => void } };
+type Props = { photos: (string | null)[]; theme: ThemeKey; initial: EditorDraft; onDraftChange: (draft: EditorDraft) => void; onBack: () => void; onFinish: (result: string) => void; embedded?: boolean; shared?: { incoming?: { sequence: number; delta: DraftDelta }[]; onDelta: (delta: DraftDelta) => void; peerGesture?: StickerMotion | null; onGesturePreview?: (motion: StickerMotion | null) => void } };
 type History = { past: EditorDraft[]; present: EditorDraft; future: EditorDraft[] };
 type Category = 'cute' | 'us' | 'text' | 'doodles';
 
@@ -169,7 +170,7 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
     <div className="editor-header"><button className="back-link" onClick={onBack}>← back to our photos</button><div className="editor-header-right"><span>STEP 04 / THE STICKER PLAYGROUND</span><button className="surprise-button" onClick={() => addSticker(STICKERS[Math.floor(Math.random()*STICKERS.length)].src)}>🎲 surprise me!</button></div></div>
     <header className="page-intro editor-intro"><h1>Decorate <em>our chaos!</em> <span>♡</span></h1><p>Drag, rotate, doodle, or add a tiny cutout of yourself. No rules, just cute.</p></header>
     <div className="editor-layout">
-      <section className="editor-stage-section"><div className="canvas-mat"><img src="/stickers/bow.svg" className="mat-bow" alt=""/><StickerCanvas ref={stage} photos={photos} theme={theme} draft={draft} selectedId={selectedId} onSelect={setSelectedId} onCommit={commit} mode={mode} brushColor={brushColor} brushSize={brushSize} eraserSize={eraserSize}/><span className="mat-scribble">handmade with ♡</span></div><div className="canvas-help">{mode === 'draw' ? 'Draw directly on the strip with your finger or mouse.' : mode === 'erase' ? 'Rub across your doodles to erase only the lines, without touching the photos or stickers.' : 'Drag a sticker · move the round corner handle to resize · top handle to rotate · pinch with two fingers.'}</div></section>
+      <section className="editor-stage-section"><div className="canvas-mat"><img src="/stickers/bow.svg" className="mat-bow" alt=""/><StickerCanvas ref={stage} photos={photos} theme={theme} draft={draft} selectedId={selectedId} onSelect={setSelectedId} onCommit={commit} onGesturePreview={shared?.onGesturePreview} peerGesture={shared?.peerGesture} mode={mode} brushColor={brushColor} brushSize={brushSize} eraserSize={eraserSize}/><span className="mat-scribble">handmade with ♡</span></div><div className="canvas-help">{mode === 'draw' ? 'Draw directly on the strip with your finger or mouse.' : mode === 'erase' ? 'Rub across your doodles to erase only the lines, without touching the photos or stickers.' : 'Drag a sticker · move the round corner handle to resize · top handle to rotate · pinch with two fingers.'}</div></section>
       <section className="editor-sidebar">
         <div className="editor-toolbox paper-card"><div className="toolbox-top"><strong>little editing tools</strong><small>{selected ? 'sticker selected ♡' : 'pick a sticker to edit'}</small></div>
           <div className="editor-tools"><button onClick={undo} disabled={shared ? ownPast.current.length === 0 : !history.past.length} title="Undo">↶<small>undo</small></button><button onClick={redo} disabled={shared ? ownFuture.current.length === 0 : !history.future.length} title="Redo">↷<small>redo</small></button><button onClick={duplicateSelected} disabled={!selected} title="Duplicate">▢<small>copy</small></button><button onClick={deleteSelected} disabled={!selected} title="Delete">×<small>delete</small></button><button onClick={() => moveLayer(true)} disabled={!selected} title="Bring forward">⇧<small>front</small></button><button onClick={() => moveLayer(false)} disabled={!selected} title="Send backward">⇩<small>back</small></button></div>
@@ -191,7 +192,7 @@ export default function Editor({ photos, theme, initial, onDraftChange, onBack, 
         <div className="editor-finish"><div className="hand-note">looking good, cuties! ♡</div><button className="pink-button wide" onClick={() => void finish()} disabled={working}>{working ? 'developing our strip...' : 'finish our masterpiece'} <span className="button-icon">↗</span></button>{error && <p className="error-note" role="alert">{error}</p>}</div>
       </section>
     </div>
-    {shared && <p className="shared-edit-note" role="status">♡ Shared editing is live. Both of your stickers and doodles appear in this strip. Undo affects your own changes.</p>}
+    {shared && <p className="shared-edit-note" role="status">♡ Shared editing is live. Both of your stickers and doodles appear in this strip. Undo affects your own changes.{shared.peerGesture ? ' Your lovebug is moving a sticker right now.' : ''}</p>}
     {cutoutOpen && <CutoutModal onClose={() => setCutoutOpen(false)} onCreate={source => void onCutoutCreated(source)} />}
   </Shell>;
 }

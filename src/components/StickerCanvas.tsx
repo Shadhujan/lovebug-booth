@@ -3,6 +3,7 @@ import type { DrawStroke, EditorDraft, Phase, StickerItem, ThemeKey } from '../t
 import { drawStrip, handleAt, PRINT_HEIGHT, PRINT_WIDTH, stickerAt } from '../lib/canvas';
 import { makeId } from '../lib/themes';
 import { eraseDoodleSegments } from '../lib/eraseDoodles';
+import type { StickerMotion } from '../lib/sharedPhotoChannel';
 
 export type StickerCanvasHandle = { exportDataURL: () => Promise<string> };
 type Props = {
@@ -12,6 +13,8 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCommit: (draft: EditorDraft, baseline?: EditorDraft) => void;
+  onGesturePreview?: (motion: StickerMotion | null) => void;
+  peerGesture?: StickerMotion | null;
   mode: Phase;
   brushColor: string;
   brushSize: number;
@@ -46,13 +49,21 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
   const activePointers = useRef(new Map<number, Point>());
   const transientRef = useRef<{ draft: EditorDraft; line: DrawStroke | null } | null>(null);
   const selectedRef = useRef(props.selectedId);
+  const previewLastSent = useRef(0);
   propsRef.current = props;
 
   const render = useCallback((draft?: EditorDraft, selected?: string | null, line?: DrawStroke | null) => {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
     const p = propsRef.current;
-    drawStrip(ctx, { photos: p.photos, theme: p.theme, draft: draft || p.draft, images: imagesRef.current, selectedId: selected === undefined ? selectedRef.current : selected, previewLine: line });
+    const base = draft || transientRef.current?.draft || p.draft;
+    const motion = p.peerGesture;
+    // A partner's in-progress drag is presentation-only. It must never alter
+    // the committed draft, undo history, or final export.
+    const preview = motion && !(stateRef.current?.item?.id === motion.id)
+      ? { ...base, stickers: base.stickers.map(sticker => sticker.id === motion.id ? { ...sticker, ...motion } : sticker) }
+      : base;
+    drawStrip(ctx, { photos: p.photos, theme: p.theme, draft: preview, images: imagesRef.current, selectedId: selected === undefined ? selectedRef.current : selected, previewLine: line });
   }, []);
 
   const loadAsset = useCallback((source: string): Promise<void> => {
@@ -80,6 +91,8 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
     render();
   }, [props.selectedId, render]);
 
+  useEffect(() => { render(); }, [props.peerGesture, render]);
+
   useImperativeHandle(ref, () => ({
     exportDataURL: async () => {
       const p = propsRef.current;
@@ -104,6 +117,7 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
     const point = getPoint(event);
+    previewLastSent.current = 0;
     activePointers.current.set(event.pointerId, point);
     event.currentTarget.setPointerCapture(event.pointerId);
     const p = propsRef.current;
@@ -198,6 +212,13 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
     }
     transientRef.current = { draft: state.draft, line: null };
     render(state.draft, item.id);
+    // 8 updates/second maximum: responsive to a partner, inexpensive on phones.
+    // The final committed delta is still sent on pointer release.
+    const now = performance.now();
+    if (propsRef.current.onGesturePreview && now - previewLastSent.current >= 125) {
+      previewLastSent.current = now;
+      propsRef.current.onGesturePreview({ id: item.id, x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation });
+    }
   };
 
   const stopPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -210,6 +231,7 @@ const StickerCanvas = forwardRef<StickerCanvasHandle, Props>(function StickerCan
       state.draft.strokes.push(state.drawing);
     }
     if (state.mode === 'draw' || (state.mode === 'erase' && state.changed) || (state.item && transientRef.current)) propsRef.current.onCommit(state.draft, state.baseline);
+    if (state.item) propsRef.current.onGesturePreview?.(null);
     stateRef.current = null; transientRef.current = null;
     render(state.draft);
   };

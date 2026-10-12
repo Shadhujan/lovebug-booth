@@ -353,13 +353,34 @@
 
 /* v0.5.1: a quiet, finite cue for the live photo controls. Never alter the
    already-approved live preview size or the editor's scrapbook layout. */
-.live-adjust-trigger.live-adjust-sparkle { position: relative; animation: lovebug-adjust-pulse 1.35s ease-out 3; }
-.live-adjust-hint { display: block; font-size: .65rem; font-weight: 600; margin-top: .14rem; }
-@keyframes lovebug-adjust-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(232,102,150,0); }
-  45% { box-shadow: 0 0 0 7px rgba(232,102,150,.17); }
+/* v0.5.2: a 30-second, higher-contrast cue on BOTH connected devices. */
+.live-adjust-trigger.live-adjust-sparkle {
+  position:relative;background:#d14c80;color:#fff;border-color:#c13e70;
+  animation:lovebug-adjust-pulse 1.8s ease-in-out infinite;
+  box-shadow:0 0 0 3px #f8cbdb,0 6px 17px #b4487036;
 }
-@media (prefers-reduced-motion: reduce) { .live-adjust-trigger.live-adjust-sparkle { animation: none; outline: 2px solid #e16d99; outline-offset: 3px; } }
+.live-adjust-trigger.live-adjust-sparkle:hover { background:#bd3a6d; }
+.live-adjust-trigger.live-adjust-sparkle .live-adjust-hint { color:#fff; }
+.live-adjust-hint { display:block;font-size:.65rem;font-weight:700;margin-top:.14rem; }
+@keyframes lovebug-adjust-pulse {
+  0%,100% { box-shadow:0 0 0 3px #f8cbdb,0 6px 17px #b4487036;transform:translateY(0); }
+  50% { box-shadow:0 0 0 10px #e56c9b42,0 8px 25px #aa386b50;transform:translateY(-2px); }
+}
+@media(min-width:1250px) {
+  /* Desktop already has the adjustment panel visible, so highlight that panel. */
+  .live-booth-workspace.live-adjust-attention > .live-controls {
+    outline:2px solid #d14c80;outline-offset:2px;
+    animation:lovebug-inspector-glow 1.8s ease-in-out infinite;
+  }
+}
+@keyframes lovebug-inspector-glow {
+  0%,100% { box-shadow:0 0 0 4px #f6cfde; }
+  50% { box-shadow:0 0 0 12px #e56c9b42; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .live-adjust-trigger.live-adjust-sparkle { animation:none;outline:3px solid #b83b6d;outline-offset:3px; }
+  .live-booth-workspace.live-adjust-attention > .live-controls { animation:none;outline:3px solid #b83b6d; }
+}
 
 .live-camera-hidden { display: none; }
 .live-post-capture { max-width: 1200px; margin: 0 auto; }
@@ -392,3 +413,41 @@
   .live-photo-choice { padding: 1.3rem .8rem; }
   .live-photo-choice-preview { gap: .25rem; }
 }
+
+/* v0.5.2: unmistakable invitation when the other person selects together. */
+.live-photo-choice-option.partner-invited {
+  border:2px solid #cd4a7d;background:#ffe7f0;
+  box-shadow:0 0 0 4px #f8cada,0 8px 18px #bc527523;
+  animation:lovebug-choice-invite 1.7s ease-in-out 4;
+}
+.live-photo-choice-option.partner-invited .live-choice-icon { background:#d55787;color:#fff; }
+.live-partner-invite-label { font-weight:800;font-size:.78rem;color:#9c315e;line-height:1.4; }
+@keyframes lovebug-choice-invite {
+  0%,100% { box-shadow:0 0 0 4px #f8cada,0 8px 18px #bc527523; }
+  50% { box-shadow:0 0 0 10px #f3a3c04f,0 8px 22px #bc527540; }
+}
+.shared-finish-notice {
+  max-width:1050px;margin:.65rem auto 1rem;padding:13px 17px;
+  border:1px solid #eab6c9;border-radius:15px;background:#ffedf3;
+  color:#92506d;font-size:.86rem;line-height:1.6;
+  display:flex;align-items:center;gap:8px 15px;flex-wrap:wrap;
+}
+.shared-finish-notice strong { color:#a13d6d;font-weight:800; }
+.shared-finish-notice span { flex:1;min-width:190px; }
+@media(prefers-reduced-motion:reduce) { .live-photo-choice-option.partner-invited { animation:none; } }
+
+.shared-status-toast {
+  position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:40;
+  display:flex;align-items:center;gap:11px;max-width:min(365px,calc(100vw - 32px));
+  background:#fff9fb;color:#894663;border:1px solid #e9aec3;
+  box-shadow:0 12px 32px #874a7140;border-radius:16px;padding:12px 13px;
+  animation:lovebug-toast-enter .3s ease-out both;
+}
+.shared-status-toast>span {font-size:26px;color:#d25381;line-height:1}
+.shared-status-toast>div {display:grid;gap:3px;min-width:0;flex:1}
+.shared-status-toast strong {font-size:.82rem;line-height:1.4}
+.shared-status-toast small {font-size:.72rem;line-height:1.4;color:#a9738b}
+.shared-status-toast button {border:0;background:none;color:#9a5b78;cursor:pointer;font-size:1.35rem;min-width:32px;min-height:38px}
+.shared-status-toast button:focus-visible {outline:2px solid #c44f7f;outline-offset:2px;border-radius:6px}
+@keyframes lovebug-toast-enter {from {opacity:0;transform:translateY(12px)}to {opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce) {.shared-status-toast {animation:none}}

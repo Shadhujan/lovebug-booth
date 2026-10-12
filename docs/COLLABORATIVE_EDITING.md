@@ -52,3 +52,20 @@ This is an incremental update on top of v0.5 secure Quick Rooms and Locked Rooms
 - Apply the v0.5.1 `git am` patch on top of v0.5, run `npm run typecheck` and `npm run build`, then test on two **HTTPS** devices before deploying to public traffic.
 - The new camera-to-editor handoff relies on both devices using v0.5.1. **Refresh both browsers** after deploying. A v0.5 guest cannot understand the new peer-to-peer photo transfer.
 - Reverting the frontend to v0.5 reintroduces the old behavior where the host's Decorate button ends the room. No database rollback is required.
+
+## v0.5.2: small collaboration cues, without a new account or storage
+
+- On each participant's first successful camera connection **per room**, the **Adjust our photo** control glows for up to 30 seconds. Opening it stops the glow. A desktop-size inspector gets the same cue because its button is normally hidden. Reduced-motion mode displays an obvious, static highlight instead. The full-size camera view never changes size.
+- If one person chooses **Decorate together**, the other person's corresponding choice gets a stronger pink border, a short pulse, and the words **Your lovebug picked this**. Choosing together is still voluntary.
+- When a shared sticker is dragged, rotated, resized or pinched, tiny position-only previews are sent at **at most 8 updates per second** over the same WebRTC data channel. The partner sees the movement before pointer release. The final edit is still committed only on release, so undo remains action-based. Doodles retain their existing on-release behavior to avoid streaming large lines.
+- Finishing a shared version announces **Your lovebug finished a version** in the partner's editor. This is an in-app status, not an operating-system notification. It does not finish their copy, close their room, or prevent further editing. Going back from a finished image to stickers announces that editing resumed. Completed images are snapshots; to include later edits, return to stickers and finish again.
+- **Offline editing is unchanged and mandatory.** A dropped peer connection clears only the ephemeral movement preview. The participant retains already-received photos and committed edits and can finish/download locally. No Supabase schema or cloud photo upload is introduced.
+
+### Extra v0.5.2 acceptance tests
+
+- [ ] Connect two cameras. On BOTH screens, check the vivid pink Adjust our photo cue persists for about 30 seconds if untouched; clicking stops it. On desktop-wide screens, check the inspector highlights instead of an unavailable button.
+- [ ] Enable reduced motion: the cue remains visibly outlined without moving.
+- [ ] Select Decorate together only on one phone: the other phone's **Decorate together** choice is visibly highlighted before they touch it, but they can still choose independently.
+- [ ] With two shared editors open, slowly drag or rotate a sticker: the other phone sees intermediate positions at a modest rate, not only the final jump. Releasing commits the final position and Undo reverses it correctly.
+- [ ] Finish on one device while the other edits: show an in-app notification but let the second device finish whenever it wants. Returning to stickers from the finish screen clears the other device's finished indicator.
+- [ ] Repeat with a slow or disconnected connection: no blank strip, no lost local draft, no forced room exit. Disconnecting one participant during editing **must always leave the other able to finish locally**.

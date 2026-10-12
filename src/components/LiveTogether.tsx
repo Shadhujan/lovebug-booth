@@ -4,7 +4,7 @@ import Review from './Review';
 import Finish from './Finish';
 import { freshDraft } from '../lib/themes';
 import { applyDraftDelta, type DraftDelta } from '../lib/sharedDraft';
-import { SharedPhotoChannel, type PhotoMessage } from '../lib/sharedPhotoChannel';
+import { SharedPhotoChannel, type PhotoMessage, type StickerMotion } from '../lib/sharedPhotoChannel';
 import type { EditorDraft, PhotoFraming, ThemeKey } from '../types';
 import { type RealtimeChannel } from '@supabase/supabase-js';
 import { captureLivePair, DEFAULT_COMPOSITION, drawTogetherFrame, isTogetherComposition, type TogetherCutouts, type TogetherComposition } from '../lib/togetherPhotos';
@@ -95,6 +95,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   const [photoNotice, setPhotoNotice] = useState('');
   const [finishedImage, setFinishedImage] = useState('');
   const [finishedFrom, setFinishedFrom] = useState<'shared' | 'solo'>('solo');
+  const finishedFromRef = useRef(finishedFrom); finishedFromRef.current = finishedFrom;
   const photoChannelRef = useRef<SharedPhotoChannel | null>(null);
   const photosQueuedRef = useRef(false);
   const hostPhotosRef = useRef<string[] | null>(null);
@@ -102,10 +103,18 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   const individualDraftRef = useRef<EditorDraft>(freshDraft());
   const [reviewVersion, setReviewVersion] = useState(0);
   const [incomingEdit, setIncomingEdit] = useState<{sequence: number; delta: DraftDelta}[]>([]);
+  const [peerGesture, setPeerGesture] = useState<StickerMotion | null>(null);
+  const [partnerFinished, setPartnerFinished] = useState<boolean | null>(null);
+  const [partnerResumed, setPartnerResumed] = useState(false);
+  const [partnerToast, setPartnerToast] = useState<'finished' | 'editing' | null>(null);
+  const partnerFinishedRef = useRef(false);
+  const livePreviewSendingRef = useRef(false);
   const incomingSequenceRef = useRef(0);
   const seenOperationsRef = useRef(new Set<string>());
   const adjustedOnceRef = useRef(false);
   const [suggestAdjustments, setSuggestAdjustments] = useState(false);
+  const cueRoomRef = useRef<string | null>(null);
+  const cueTimerRef = useRef<number | null>(null);
   const roomRef = useRef<Room | null>(null);
   roomRef.current = room;
 
@@ -156,6 +165,12 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   const customSceneReady = composition.backdrop !== 'custom' || (Boolean(customImage) && peerBackgroundReadyId === composition.customBackgroundId);
 
   useEffect(() => { onPhotoStageChange?.(photoStage !== 'camera'); }, [photoStage, onPhotoStageChange]);
+  useEffect(() => { if (photoStage !== 'shared') setPeerGesture(null); }, [photoStage]);
+  useEffect(() => {
+    if (!partnerToast) return;
+    const timer = window.setTimeout(() => setPartnerToast(null), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [partnerToast]);
   useEffect(() => () => {
     // Leaving the page ends the host's room. A guest already editing can
     // finish offline when the connection closes.
@@ -200,9 +215,21 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     return () => window.clearTimeout(timeout);
   }, [photoStage, room, connected, guestCaptured, hostPhotosReady]);
 
+  // One prominent, finite 30-second invitation on EACH approved device.
+  // Reconnecting to the same room never restarts the attention animation.
   useEffect(() => {
-    if (connected && localReady && remoteReady && !adjustedOnceRef.current) setSuggestAdjustments(true);
-  }, [connected, localReady, remoteReady]);
+    if (!room || photoStage !== 'camera' || !connected || !localReady || !remoteReady
+        || cueRoomRef.current === room.id) return;
+    cueRoomRef.current = room.id;
+    if (adjustedOnceRef.current) return;
+    setSuggestAdjustments(true);
+    if (cueTimerRef.current !== null) window.clearTimeout(cueTimerRef.current);
+    cueTimerRef.current = window.setTimeout(() => {
+      cueTimerRef.current = null;
+      setSuggestAdjustments(false);
+    }, 30_000);
+  }, [room, photoStage, connected, localReady, remoteReady]);
+  useEffect(() => () => { if (cueTimerRef.current !== null) window.clearTimeout(cueTimerRef.current); }, []);
 
   function sendPhotoMessage(message: PhotoMessage) {
     const channel = photoChannelRef.current;
@@ -226,6 +253,17 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
       setPhotoStage('solo-review');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  function previewPartnerSticker(motion: StickerMotion | null) {
+    const channel = photoChannelRef.current;
+    if (photoStageRef.current !== 'shared' || !channel?.ready) return;
+    // Position previews are disposable and must never build up behind photos
+    // or final edits if a phone's connection becomes slow.
+    if (motion && livePreviewSendingRef.current) return;
+    if (motion) livePreviewSendingRef.current = true;
+    void channel.send({ kind: 'gesture', sticker: motion }).catch(() => undefined)
+      .finally(() => { if (motion) livePreviewSendingRef.current = false; });
   }
 
   function onSharedEdit(delta: DraftDelta) {
@@ -254,9 +292,19 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   }
 
   function finishEditing(image: string, from: 'shared' | 'solo') {
+    if (from === 'shared' && photoChannelRef.current?.ready) sendPhotoMessage({ kind: 'finish-state', state: 'finished' });
+    setPeerGesture(null);
     setFinishedImage(image);
     setFinishedFrom(from);
     setPhotoStage('finished');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function returnToStickers() {
+    if (finishedFromRef.current === 'shared' && photoChannelRef.current?.ready) {
+      sendPhotoMessage({ kind: 'finish-state', state: 'editing' });
+    }
+    setPhotoStage(finishedFromRef.current);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -456,7 +504,8 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     photosQueuedRef.current = false;
     hostPhotosRef.current = null;
     setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false);
-    setMineChoice(null); setPartnerChoice(null); setPhotoNotice('');
+    setMineChoice(null); setPartnerChoice(null); setPartnerFinished(null); setPartnerResumed(false); setPartnerToast(null);
+    partnerFinishedRef.current = false; setPeerGesture(null); setPhotoNotice('');
     sharedDraftRef.current = freshDraft(); individualDraftRef.current = freshDraft();
     seenOperationsRef.current.clear();
     adjustedOnceRef.current = false; setSuggestAdjustments(false);
@@ -475,6 +524,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     function disconnectPeer() {
       photoChannelRef.current?.close(); photoChannelRef.current = null;
       setTransportReady(false);
+      setPeerGesture(null);
       backgroundChannelRef.current?.close(); backgroundChannelRef.current = null;
       setPeerBackgroundReadyId(null);
       setPartnerFlashEnabled(null);
@@ -509,9 +559,19 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
 
     function onPhotoChannel(channel: RTCDataChannel) {
       const transport = new SharedPhotoChannel({
-        onOpen: () => setTransportReady(true),
+        onOpen: () => {
+          setTransportReady(true);
+          // Recover the partner's finish indicator after a brief reconnect.
+          const stage = photoStageRef.current;
+          if (stage === 'finished' && finishedFromRef.current === 'shared') {
+            void transport.send({ kind: 'finish-state', state: 'finished' }).catch(() => undefined);
+          } else if (stage === 'shared' || stage === 'shared-review') {
+            void transport.send({ kind: 'finish-state', state: 'editing' }).catch(() => undefined);
+          }
+        },
         onClose: () => {
           setTransportReady(false);
+          setPeerGesture(null);
           photosQueuedRef.current = false;
           if (photoStageRef.current !== 'camera') setPhotoNotice('Your lovebug disconnected. You can still edit and download these photos on this device.');
         },
@@ -529,10 +589,24 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
             if (joinedRoom.role === 'host') setGuestCaptured(true);
           } else if (message.kind === 'choice') {
             setPartnerChoice(message.choice);
+          } else if (message.kind === 'finish-state') {
+            if (message.state === 'finished') {
+              partnerFinishedRef.current = true;
+              setPartnerFinished(true);
+              setPartnerResumed(false);
+              setPartnerToast('finished');
+            } else {
+              if (partnerFinishedRef.current) { setPartnerResumed(true); setPartnerToast('editing'); }
+              partnerFinishedRef.current = false;
+              setPartnerFinished(false);
+            }
+          } else if (message.kind === 'gesture') {
+            setPeerGesture(message.sticker);
           } else if (message.kind === 'edit') {
             if (seenOperationsRef.current.has(message.id)) return;
             seenOperationsRef.current.add(message.id);
             if (seenOperationsRef.current.size > 600) seenOperationsRef.current.clear();
+            if (message.delta.stickers?.length || message.delta.removedStickers?.length) setPeerGesture(null);
             sharedDraftRef.current = applyDraftDelta(sharedDraftRef.current, message.delta);
             setReviewVersion(x => x + 1);
             if (photoStageRef.current === 'shared') setIncomingEdit(current => [...current.slice(-119), { sequence: ++incomingSequenceRef.current, delta: message.delta }]);
@@ -811,6 +885,10 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
     setPhotoStage('camera'); setMineChoice(null); setPartnerChoice(null); setReviewVersion(0);
     setHostPhotosReady(false); setGuestCaptured(false); setTransportReady(false); photosQueuedRef.current = false;
     setPhotoNotice(''); setFinishedImage(''); setIncomingEdit([]);
+    setPartnerFinished(null); setPartnerResumed(false); setPartnerToast(null); partnerFinishedRef.current = false; setPeerGesture(null);
+    setSuggestAdjustments(false); cueRoomRef.current = null;
+    if (cueTimerRef.current !== null) window.clearTimeout(cueTimerRef.current);
+    cueTimerRef.current = null;
     setSettingsOpen(false);
     setPartnerFlashEnabled(null); setFlashActive(false);
     cutoutsRef.current = {}; cutoutsReadyRef.current = false;
@@ -840,6 +918,10 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
 
   function selectComposition(value: TogetherComposition) {
     if (!room || shootingRef.current || !isTogetherComposition(value)) return;
+    // At large desktop widths the inspector is visible without opening it.
+    adjustedOnceRef.current = true; setSuggestAdjustments(false);
+    if (cueTimerRef.current !== null) window.clearTimeout(cueTimerRef.current);
+    cueTimerRef.current = null;
     const previous = compositionRef.current;
     setComposition(value);
     compositionRef.current = value;
@@ -873,6 +955,8 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   function openAdjustments() {
     adjustedOnceRef.current = true;
     setSuggestAdjustments(false);
+    if (cueTimerRef.current !== null) window.clearTimeout(cueTimerRef.current);
+    cueTimerRef.current = null;
     setSettingsOpen(true);
     // On phones and compact laptops, bring the full-size photo above the
     // bottom inspector. The inspector never changes the photo's dimensions.
@@ -1051,6 +1135,13 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
   }, [room, connected, localReady, remoteReady, photoStage]);
 
   return <section className="live-together" aria-label="Live remote photo booth">
+    {partnerToast && (photoStage === 'shared' || photoStage === 'shared-review' || (photoStage === 'finished' && finishedFrom === 'shared')) &&
+      <div className="shared-status-toast" role="status">
+        <span aria-hidden="true">{'\u2661'}</span>
+        <div><strong>{partnerToast === 'finished' ? 'Your lovebug finished a version' : 'Your lovebug is decorating again'}</strong>
+          <small>{partnerToast === 'finished' ? 'You can keep editing yours.' : 'Their changes will appear while connected.'}</small></div>
+        <button type="button" onClick={() => setPartnerToast(null)} aria-label="Dismiss editing notification">{'\u00d7'}</button>
+      </div>}
     {photoStage !== 'camera' && <div className="live-post-capture">
       {photoStage === 'choice' && <section className="paper-card live-photo-choice" aria-label="Choose how to decorate">
         <div className="eyebrow">FOUR PICTURES / TWO LOVEBUGS</div>
@@ -1058,9 +1149,10 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
         <p>We've got the cute part. Shall we decorate one strip together or each make our own?</p>
         <div className="live-photo-choice-preview">{shots.map((image, index) => <img key={index} src={image} alt={`Our shared photo ${index + 1}`} />)}</div>
         <div className="live-photo-choice-options">
-          <button className={`live-photo-choice-option ${mineChoice === 'shared' ? 'chosen' : ''}`} type="button" onClick={() => chooseEditing('shared')} disabled={!transportReady || !hostPhotosReady || partnerChoice === 'solo'}>
+          <button className={`live-photo-choice-option ${mineChoice === 'shared' ? 'chosen' : ''} ${partnerChoice === 'shared' && mineChoice !== 'shared' ? 'partner-invited' : ''}`} type="button" onClick={() => chooseEditing('shared')} disabled={!transportReady || !hostPhotosReady || partnerChoice === 'solo'}>
             <span className="live-choice-icon" aria-hidden="true">♡</span><strong>decorate together</strong>
             <small>Both of you add stickers and doodles to the same strip, live.</small>
+            {partnerChoice === 'shared' && mineChoice !== 'shared' && <span className="live-partner-invite-label">Your lovebug picked this {'\u2661'}</span>}
           </button>
           <button className="live-photo-choice-option" type="button" onClick={() => chooseEditing('solo')}>
             <span className="live-choice-icon" aria-hidden="true">✿</span><strong>make my own version</strong>
@@ -1083,16 +1175,18 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
       </>}
       {(photoStage === 'shared' || photoStage === 'solo') && <>
         <div className="paper-card live-editor-note"><div><strong>{photoStage === 'shared' ? '♡ One little masterpiece, two editors' : '✿ Your own little masterpiece'}</strong><p>{photoStage === 'shared' ? transportReady && room ? 'Your edits appear on both phones. Only your own actions go in your undo history.' : 'The connection ended, but you can keep decorating this photo on your device.' : 'Your decorations belong to this copy only. Share or download when you are ready.'}</p></div><button className="soft-button" onClick={backToChoices}>← choices</button></div>
+        {photoStage === 'shared' && (partnerFinished || partnerResumed) && <div className="shared-finish-notice" role="status"><strong>{partnerFinished ? 'Your lovebug finished a version' : 'Your lovebug is decorating again'} {'\u2661'}</strong><span>{partnerFinished ? "You can keep decorating. Your own finished photo will be created when you're ready." : 'Shared changes will keep appearing while you are both connected.'}</span></div>}
         <Editor embedded photos={shots} theme={theme}
           initial={photoStage === 'shared' ? sharedDraftRef.current : individualDraftRef.current}
           onDraftChange={next => { if (photoStage === 'shared') sharedDraftRef.current = next; else individualDraftRef.current = next; }}
-          shared={photoStage === 'shared' ? { incoming: incomingEdit, onDelta: onSharedEdit } : undefined}
+          shared={photoStage === 'shared' ? { incoming: incomingEdit, onDelta: onSharedEdit, peerGesture, onGesturePreview: previewPartnerSticker } : undefined}
           onBack={() => setPhotoStage(photoStage === 'shared' ? 'shared-review' : 'solo-review')} onFinish={image => finishEditing(image, photoStage)} />
         {photoNotice && <p className="error-note" role="status">{photoNotice}</p>}
       </>}
       {photoStage === 'finished' && <>
         <Finish embedded image={finishedImage} theme={theme} onAlbum={openAlbumFromPhoto} onAgain={endPhotoAdventure}
-          onBack={() => { setPhotoStage(finishedFrom); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+          onBack={returnToStickers} />
+        {finishedFrom === 'shared' && <p className="shared-finish-notice" role="status">{partnerFinished ? 'You both finished a version. Download yours to keep this moment.' : partnerResumed ? 'Your lovebug is decorating again. This is a snapshot; return to stickers when you want their latest changes.' : transportReady ? 'This is your finished snapshot. Your lovebug can keep editing. Go back to stickers to include later changes.' : 'Your photo is ready locally. The room may be disconnected, but you can still download it.'}</p>}
         {photoNotice && <p className="live-choice-status" role="status">{photoNotice}</p>}
       </>}
     </div>}
@@ -1144,7 +1238,7 @@ export default function LiveTogether({ timer, theme, onPhotoStageChange, onAlbum
           <div className="secure-request-actions"><button type="button" className="pink-button" disabled={roomBusy} onClick={() => void decideGuest(true)}>approve guest</button><button type="button" className="soft-button" disabled={roomBusy} onClick={() => void decideGuest(false)}>decline</button></div>
         </div>}
       </div>
-      <div className={`live-booth-workspace ${settingsOpen ? 'live-adjusting' : ''}`}>
+      <div className={`live-booth-workspace ${settingsOpen ? 'live-adjusting' : ''} ${suggestAdjustments && !settingsOpen ? 'live-adjust-attention' : ''}`}>
         <div className="paper-card live-main-preview">
           <div className="live-stage-header">
             <div><span className="eyebrow">THE PHOTO WE WILL REALLY SAVE</span><h3>In the same little frame <span aria-hidden="true">&hearts;</span></h3><p>The pink frame shows the full combined photo; the dotted center area is what fits on the final strip. You can reframe each shot afterward.</p></div>
