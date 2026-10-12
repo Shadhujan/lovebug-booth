@@ -488,3 +488,44 @@
 .cloud-login small{font-size:11px;color:#ae8490;line-height:1.6}
 @media(max-width:650px){.cloud-v6-pair-forms{grid-template-columns:1fr}.cloud-v6-pairing{padding:12px}.album-destination-switch button,.cloud-v6-tabs button{font-size:11px;padding:10px 5px}.album-destination-switch button small{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.album-destination-switch button,.cloud-v6-tabs button{transition:none}}
+
+/* v0.6.1: distinguish the active album, invited people and explicit photo sharing. */
+.cloud-v6-current{background:#fffdfb;border:1px solid #efd0da;border-radius:16px;padding:17px;margin:0 0 15px}
+.cloud-v6-current-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.cloud-v6-current-head h3{font-size:clamp(19px,2.8vw,24px);line-height:1.25;margin:7px 0 4px;color:#815069;overflow-wrap:anywhere}
+.cloud-v6-current-head p{color:#aa7d90;font-size:12px;line-height:1.6;margin:0 0 12px}
+.cloud-v6-current-head .plain-button{font-size:12px;white-space:nowrap}
+.cloud-v6-people-head{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#956278;font-size:12px;margin:9px 0}
+.cloud-v6-people-head span{font-size:11px;color:#af7f91}
+.cloud-v6-people{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.cloud-v6-person{min-width:0;display:flex;align-items:center;gap:9px;padding:11px;background:#fff3f7;border-radius:12px;color:#be7190}
+.cloud-v6-person>span:first-child{background:#f8dce7;border-radius:9px;font-size:17px;width:29px;height:29px;display:grid;place-items:center;flex:0 0 29px}
+.cloud-v6-person>div{flex:1;min-width:0}
+.cloud-v6-person strong{display:block;font-size:12px;color:#805367;overflow-wrap:anywhere}
+.cloud-v6-person small{display:block;font-size:10px;color:#b07d92;overflow-wrap:anywhere;margin-top:3px}
+.cloud-v6-person-role{font-size:10px;color:#a96a83;align-self:flex-start;flex-shrink:0}
+.cloud-v6-waiting{grid-column:1/-1;font-size:12px;color:#a7778e;margin:2px 0;line-height:1.5}
+.cloud-v6-identity-note{font-size:11px;color:#a98191;line-height:1.55;margin:12px 0 0}
+.cloud-v6-renew{font-size:12px;margin-top:10px}
+.cloud-v6-rename{display:grid;gap:8px;margin:0 0 14px;padding:12px;background:#fff4f6;border-radius:12px}
+.cloud-v6-rename label{font-size:11px;font-weight:800;color:#9a6077}
+.cloud-v6-rename>div{display:flex;gap:8px;align-items:center}
+.cloud-v6-rename input{width:100%;min-width:0;min-height:43px;padding:9px 10px;background:#fff;border:1px solid #eac3d0;border-radius:10px;color:#69465a}
+.cloud-v6-rename .soft-button{min-height:43px;white-space:nowrap}
+.cloud-v6-manage-actions{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 10px}
+.cloud-v6-manage-actions button{border:1px solid #efc8d5;background:#fffafb;color:#ae6983;border-radius:99px;padding:9px 14px;font-size:12px;font-weight:750}
+.cloud-v6-manage-actions button[aria-expanded="true"]{background:#fde7ee;border-color:#e69fb7}
+.cloud-v6-form-help{font-size:11px;line-height:1.55;color:#a77e8b;margin:0 0 5px}
+.cloud-v6-share-target{background:#fff5f7;border:1px solid #f1cfda;border-radius:14px;padding:13px 16px;display:grid;gap:7px;margin:0 0 19px;max-width:640px}
+.cloud-v6-share-target label{font-size:12px;font-weight:800;color:#955d75}
+.cloud-v6-share-target select{max-width:100%;width:100%;min-height:45px;padding:10px 12px;border:1px solid #ecc8d5;border-radius:12px;background:#fff;color:#735269}
+.cloud-v6-share-target small{font-size:11px;color:#ad8091;line-height:1.5}
+.cloud-v6-confirm-share{margin-top:12px;border:1px dashed #edb8ca;background:#fff8fa;border-radius:12px;padding:12px;text-align:left}
+.cloud-v6-confirm-share p{font-size:11px;line-height:1.6;color:#956779;margin:0 0 10px}
+.cloud-v6-confirm-actions{display:flex;gap:7px;flex-wrap:wrap}
+.cloud-v6-confirm-actions button{flex:1;min-height:36px;font-size:11px;border-radius:10px;border:1px solid #efc6d1;background:#fff;color:#a85e79}
+.cloud-v6-confirm-actions button:last-child{background:#f9d9e5;border-color:#e99fba;font-weight:800}
+.cloud-v6-empty .soft-button{min-height:40px;font-size:12px;margin-top:5px}
+.cloud-v6-pairing button:focus-visible,.cloud-v6-confirm-share button:focus-visible,.cloud-v6-share-target select:focus-visible,.cloud-v6-rename input:focus-visible{outline:3px solid #b95578;outline-offset:2px}
+@media(max-width:650px){.cloud-v6-people{grid-template-columns:1fr}.cloud-v6-current{padding:13px}.cloud-v6-person{padding:10px}.cloud-v6-manage-actions button{font-size:11px}.cloud-v6-current-head h3{font-size:21px}}
+@media(max-width:360px){.cloud-v6-rename>div{flex-direction:column;align-items:stretch}.cloud-v6-current-head{flex-wrap:wrap}.cloud-v6-confirm-actions{flex-direction:column}}

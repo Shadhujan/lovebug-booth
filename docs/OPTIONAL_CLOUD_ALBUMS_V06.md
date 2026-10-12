@@ -1,5 +1,7 @@
 # Lovebug Booth v0.6 — optional accounts and private cloud albums
 
+> **v0.6.1 update:** Existing personal cloud photos can now be copied into selected shared albums, and the selected album shows its approved people and has a separate rename action. Apply the v0.6.1 Git patch, then run `supabase/migrations/20261013_005_cloud_albums_v061.sql`. See `docs/CLOUD_ALBUM_V061_FIXES.md` for the test checklist.
+
 > This replaces the hidden **single-couple** cloud prototype from v0.4. It does not change Quick Rooms, Locked Rooms, WebRTC, sticker editing, local memories, or daily health jobs. Nothing is uploaded unless the person taps a cloud-save button.
 
 ## What is included

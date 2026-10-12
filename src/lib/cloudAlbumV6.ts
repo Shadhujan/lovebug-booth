@@ -137,3 +137,73 @@ export async function deleteOwnCloudPhoto(record: CloudPhoto, userId: string): P
   const { error: imageError } = await api().storage.from(BUCKET).remove([record.object_path]);
   if (imageError) throw new Error('Album record removed. A private file still needs cleanup.');
 }
+
+/** A name/email is only revealed after the caller is a permanent, verified album member. */
+export type CloudAlbumMember = {
+  user_id: string;
+  display_name: string;
+  email: string;
+  is_owner: boolean;
+  joined_at: string;
+};
+
+export async function listAlbumMembers(coupleId: string): Promise<CloudAlbumMember[]> {
+  if (!isUuid(coupleId)) throw new Error('Choose a shared album first.');
+  const { data, error } = await api().rpc('lovebug_v6_album_members', { p_couple: coupleId });
+  if (error) throw new Error(`Could not load album members: ${error.message}`);
+  return (data ?? []) as CloudAlbumMember[];
+}
+
+export async function renameCouple(coupleId: string, title: string): Promise<void> {
+  const cleanTitle = title.trim();
+  if (!isUuid(coupleId) || !cleanTitle || cleanTitle.length > 60) {
+    throw new Error('Choose an album name between 1 and 60 characters.');
+  }
+  const { error } = await api().rpc('lovebug_v6_rename_couple', {
+    p_couple: coupleId,
+    p_title: cleanTitle,
+  });
+  if (error) throw new Error(`Could not rename this album: ${error.message}`);
+}
+
+/** Make an independent shared copy of a private cloud photo.
+ * Neither the original Storage object nor the original album record is modified.
+ */
+export async function sharePrivateCloudPhoto(
+  photo: CloudPhoto,
+  image: Blob,
+  user: User,
+  coupleId: string,
+): Promise<void> {
+  if (user.is_anonymous) throw new Error('Sign in with Google before sharing photos.');
+  if (photo.scope !== 'personal' || photo.owner_id !== user.id) {
+    throw new Error('Only your own private photos can be shared this way.');
+  }
+  if (!isUuid(coupleId)) throw new Error('Choose a shared album first.');
+  if (!image.size || image.size > MAX_BYTES) throw new Error('The image is empty or exceeds the 10 MB cloud limit.');
+
+  const id = crypto.randomUUID();
+  const path = `shared/${coupleId}/${id}.png`;
+  const bucket = api().storage.from(BUCKET);
+  const { error: uploadError } = await bucket.upload(path, image, {
+    contentType: 'image/png', upsert: false, cacheControl: '3600',
+  });
+  if (uploadError) throw new Error(`Could not share this photo: ${uploadError.message}`);
+
+  const { error: insertError } = await api().from('lovebug_v6_photos').insert({
+    id,
+    owner_id: user.id,
+    scope: 'shared',
+    couple_id: coupleId,
+    theme: photo.theme,
+    note: photo.note.slice(0, 240),
+    object_path: path,
+    // Reusing this source identifier makes repeat shares to the same album idempotent.
+    source_local_id: photo.id,
+  });
+  if (insertError) {
+    await bucket.remove([path]);
+    if (insertError.code === '23505') throw new Error('This photo is already shared with the selected album.');
+    throw new Error(`The photo could not be added to the shared album: ${insertError.message}`);
+  }
+}
