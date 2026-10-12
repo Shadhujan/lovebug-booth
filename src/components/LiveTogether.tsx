@@ -64,7 +64,8 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
   const [shots, setShots] = useState<string[]>([]);
   const [shooting, setShooting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [cutoutStatus, setCutoutStatus] = useState<'off' | 'loading' | 'ready' | 'error'>('off');
+  const [cutoutStatus, setCutoutStatus] = useState<'off' | 'loading' | 'searching' | 'ready' | 'error'>('off');
+  const [missingPerson, setMissingPerson] = useState<'host' | 'guest' | null>(null);
   const [peerCutoutReady, setPeerCutoutReady] = useState(false);
   const virtualEnabled = composition.backdrop !== 'original';
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -106,7 +107,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
       setNotice('Wait until both camera feeds are connected.'); return;
     }
     if (selected.backdrop !== 'original' && (!cutoutsReadyRef.current || !peerCutoutReadyRef.current)) {
-      setNotice('Wait until both person cutouts are ready, or switch to Original cameras.');
+      setNotice('We cannot see both people clearly yet. Face the cameras and try brighter lighting, or choose Original cameras.');
       return;
     }
     shootingRef.current = true;
@@ -126,6 +127,9 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
         const mine = localVideoRef.current;
         const theirs = remoteVideoRef.current;
         if (!mine || !theirs) throw new Error('A camera disconnected during the countdown.');
+        if (selected.backdrop !== 'original' && (!cutoutsReadyRef.current || !cutoutsRef.current.host || !cutoutsRef.current.guest)) {
+          throw new Error('A person disappeared from the virtual scene. Please move into the light and take the photos again, or choose Original cameras.');
+        }
         // Host/guest source ordering is identical on both devices, including mirrors.
         made.push(captureLivePair(mine, theirs, selected, room?.role ?? 'host',
           selected.backdrop !== 'original' && cutoutsReadyRef.current
@@ -424,6 +428,7 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
     cutoutsRef.current = {};
     cutoutsReadyRef.current = false;
     setCutoutStatus(virtualEnabled ? 'loading' : 'off');
+    setMissingPerson(null);
     if (!virtualEnabled || !room || !connected || !localReady || !remoteReady) {
       if (room) send({ kind: 'cutout-ready', ready: false });
       return () => { active = false; };
@@ -451,11 +456,26 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
           if (!cutoutsReadyRef.current && cutoutsRef.current.host && cutoutsRef.current.guest) {
             cutoutsReadyRef.current = true;
             setCutoutStatus('ready');
+            setMissingPerson(null);
             send({ kind: 'cutout-ready', ready: true });
           }
         } catch (reason) {
+          // Low light or a face moving out of frame is recoverable. Keep
+          // checking the cameras rather than permanently stopping inference.
+          if (reason instanceof Error && reason.name === 'PersonNotDetectedError') {
+            // cutout() may have reused the same canvas before the model
+            // rejected its mask. Discard it immediately: a raw or transparent
+            // frame must never be mistaken for a valid detected person.
+            delete cutoutsRef.current[role];
+            if (cutoutsReadyRef.current) send({ kind: 'cutout-ready', ready: false });
+            cutoutsReadyRef.current = false;
+            setCutoutStatus('searching');
+            setMissingPerson(role);
+            return;
+          }
           cancelAnimationFrame(frame);
           setCutoutStatus('error');
+          setMissingPerson(null);
           cutoutsReadyRef.current = false;
           cutoutsRef.current = {};
           send({ kind: 'cutout-ready', ready: false });
@@ -502,7 +522,10 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
             drawTogetherFrame(canvas,
               room.role === 'host' ? localSource : remoteSource,
               room.role === 'guest' ? localSource : remoteSource,
-              compositionRef.current, scratch,
+              // While detection is incomplete, show live cameras rather than
+              // a misleading empty illustrated scene. Export is still blocked.
+              cutoutsReadyRef.current ? compositionRef.current
+                : { ...compositionRef.current, backdrop: 'original' }, scratch,
               cutoutsReadyRef.current ? cutoutsRef.current as TogetherCutouts : undefined);
             // The mobile inspector displays a live, reduced-resolution copy
             // of the *same* composited frame. No second cropping algorithm.
@@ -540,11 +563,15 @@ export default function LiveTogether({ timer, onCompleted }: Props) {
             {showGuides && connected && remoteReady && <div className="live-stage-guides" aria-hidden="true"><span>your shared photo</span></div>}
             {count !== null && <div className="live-count-overlay" aria-label={`Taking photo in ${count}`}>{count}</div>}
           </div>
-          {virtualEnabled && <p className="together-cutout-status" role="status" data-state={cutoutStatus}>
-            {cutoutStatus === 'ready' ? peerCutoutReady ? '♡ Both cutouts are ready. You share one little world.' : 'Your cutouts are ready. Waiting for your lovebug’s phone…'
-              : cutoutStatus === 'error' ? 'Background remover unavailable. Open Adjust our photo and choose Original cameras.'
-              : 'Preparing your shared world… each phone is cutting out both people locally.'}
-          </p>}
+          {virtualEnabled && <div className="together-cutout-status" role="status" data-state={cutoutStatus}>
+            <span>{cutoutStatus === 'ready'
+              ? peerCutoutReady ? '♡ Both people are visible. Your shared scene is ready.' : 'We found both people here. Waiting for your lovebug’s phone…'
+              : cutoutStatus === 'searching'
+                ? `We can’t clearly find ${missingPerson === (room.role === 'host' ? 'host' : 'guest') ? 'you' : 'your lovebug'} yet. Move into the camera frame and brighten the room. We’re showing the original cameras until both people are visible.`
+              : cutoutStatus === 'error' ? 'Person cutouts stopped working. You can continue with Original cameras.'
+              : 'Finding both people… Look toward the cameras and keep your head and shoulders inside the frame.'}</span>
+            {room.role === 'host' && (cutoutStatus === 'searching' || cutoutStatus === 'error') && <button type="button" className="cutout-fallback-link" onClick={() => selectComposition({ ...compositionRef.current, backdrop: 'original' })}>Use Original cameras ↗</button>}
+          </div>}
           <div className="live-shoot-row live-preview-shoot">
             <button className="pink-button" disabled={room.role !== 'host' || !connected || !remoteReady || shooting || (virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady))} onClick={startSharedShots}>{shooting ? `capturing photo ${Math.min(4, shotCount + 1)} / 4...` : 'take four photos together'} <span className="button-icon">&#9825;</span></button>
             <span>{room.role === 'guest' ? 'Your partner starts the countdown.' : virtualEnabled && (cutoutStatus !== 'ready' || !peerCutoutReady) ? 'Preparing the shared scene on both devices.' : connected ? 'Ready when you are.' : 'Waiting for both cameras.'}</span>

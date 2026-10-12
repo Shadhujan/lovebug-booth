@@ -170,3 +170,9 @@
 .together-cutout-status[data-state="error"]{background:#fff2e3;border-color:#e9d2b3;color:#976849}
 @media(max-width:760px){.together-scale-grid{grid-template-columns:1fr}.together-backdrop-image{height:60px}}
 @media(prefers-reduced-motion:reduce){.together-backdrop-options button{transition:none}}
+
+/* Virtual-scene person detection feedback. This does not alter the preview size. */
+.together-cutout-status[data-state="searching"]{background:#fff2e3;border-color:#eccfa7;color:#936342}
+.cutout-fallback-link{background:#fff9f7;border:1px solid #e6afbc;border-radius:999px;color:#a75a77;padding:7px 11px;font-size:11px;font-weight:800;white-space:normal;cursor:pointer;margin:7px 0 0;display:inline-flex;align-items:center}
+.cutout-fallback-link:hover{background:#ffe6ec}
+.cutout-fallback-link:focus-visible{outline:3px solid #b05f89;outline-offset:3px}

@@ -60,3 +60,15 @@ Camera frames and photos are processed locally **without sending them to these e
 - **Rooms still use public invite-link Realtime channels without signed-in room membership.** An exposed room link is not private. Private authenticated rooms are a separate security milestone. Do not send sensitive content using these experimental rooms.
 - STUN-only WebRTC remains in place; production TURN/reconnection improvements are not included here.
 - The album remains local to each browser. A shared authenticated Supabase album will be a separate milestone.
+
+## v0.3.3: if the garden appears without either person
+
+A loaded background-removal model does not mean it has recognized both people. The live booth now checks how much foreground the model actually found before saying "ready" or enabling the shutter. Masks that are empty or nearly all foreground are rejected, and the category mask is tried if the confidence mask looks unusable.
+
+- While the model is looking for one or both people, the main preview temporarily shows the **Original cameras** instead of an empty illustration. The virtual background choice is kept; it automatically appears again once both cutouts are valid.
+- A warning under the preview tells you to face the camera, brighten the room, and keep your head and shoulders in view. The host can use **Original cameras** immediately without ending the call.
+- If a person disappears during a countdown, the four-shot sequence stops rather than exporting a blank person.
+- Photo Letters rejects missing subjects with a helpful message instead of producing an empty virtual strip. Choose better-lit photos or Original cameras.
+- Neither the shared photo dimensions nor the existing mobile adjustment panel were changed.
+
+Test with normal indoor light and a darker room, including the case where one person walks away from their camera. The real Android segmentation quality still needs testing on both devices.

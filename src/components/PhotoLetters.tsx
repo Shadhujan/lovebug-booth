@@ -51,7 +51,7 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
         const host = loaded.cutout(mine, mine.naturalWidth, mine.naturalHeight);
         const guest = loaded.cutout(theirs, theirs.naturalWidth, theirs.naturalHeight);
         if (active) { setPreviewCutouts({ host, guest }); setCutoutStatus('ready'); }
-      }).catch(() => { if (active) { setCutoutStatus('error'); setError('The background remover could not load. Choose Original cameras, or try again online.'); } })
+      }).catch(reason => { if (active) { setCutoutStatus('error'); setError(reason instanceof Error ? reason.message : 'The background remover could not find both people. Choose Original cameras or use clearer pictures.'); } })
         .finally(() => processor?.close());
     }
     return () => { active = false; };
@@ -118,7 +118,7 @@ export default function PhotoLetters({ mine, partner, onMine, onPartner, onCamer
     </div>
     <div className="paper-card letter-combine"><div><span className="eyebrow">03 / ONE SWEET PHOTO STRIP</span><h3>Bring your pictures together</h3><p>Adjust the shared framing below. When the first pictures are ready, you can see exactly how they will look together before saving all four.</p></div>
       <TogetherCompositionControls value={composition} onChange={setComposition} />
-      {virtualEnabled && firstPair && <p className="together-cutout-status" role="status" data-state={cutoutStatus}>{cutoutStatus === 'ready' ? '♡ Your first two photo cutouts are ready.' : cutoutStatus === 'error' ? 'Person cutouts are not available; switch to Original cameras.' : 'Preparing the people-only preview locally…'}</p>}
+      {virtualEnabled && firstPair && <p className="together-cutout-status" role="status" data-state={cutoutStatus}>{cutoutStatus === 'ready' ? '♡ Your first two photo cutouts are ready.' : cutoutStatus === 'error' ? 'Could not clearly find both people. Choose brighter pictures or Original cameras.' : 'Preparing the people-only preview locally…'}</p>}
       {firstPair && <div className="letter-merged-preview"><div><span className="eyebrow">PREVIEW / FIRST PHOTO</span><p>The other three will be framed in exactly the same way.</p></div><canvas ref={previewRef} width={660} height={495} role="img" aria-label="Preview of the first two photos blended into one shared frame" /></div>}
       <button className="pink-button letter-combine-button" disabled={busy || !mineDone || !partnerDone || (virtualEnabled && cutoutStatus !== 'ready')} onClick={() => void combine()}>{busy ? 'making your memory...' : 'combine our four pictures'} <span className="button-icon">&#9825;</span></button>
       {!mineDone || !partnerDone ? <small>Both sets of four photos are required before combining.</small> : null}
