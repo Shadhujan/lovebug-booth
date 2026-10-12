@@ -1,0 +1,6 @@
+# Function uses its own two long random webhook tokens; every request without
+# the correct credential is rejected by the handler.
+project_id = "lovebug-booth"
+
+[functions.lovebug-health]
+verify_jwt = false

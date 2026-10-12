@@ -8,6 +8,10 @@ A playful, mobile-first couples photo booth. This is a personal project, not a b
 
 > The concept illustration is a design reference. The actual UI uses responsive HTML/CSS and an interactive Canvas editor, rather than a flattened screenshot.
 
+### v0.5.4 — Daily Health & Keep-Alive (optional infrastructure)
+
+Two independent schedulers (GitHub Actions + your external cron) call a **token-protected Supabase Edge Function** to record a UTC daily heartbeat and Vercel site reachability. This does **not** upload photos or change the booth UI. The public `keep_alive_log` security finding is resolved by enabling RLS and revoking browser access; only the server-side function writes the table. **Deployment, two private tokens, and the SQL migration are required before using the endpoint.** See [Daily Health & Keep-Alive](docs/DAILY_HEALTH_KEEPALIVE.md). Scheduled activity does not guarantee that a Free Supabase project will never pause.
+
 ### v0.5 Secure Together Apart (guest-first)
 
 Live rooms are now **unlisted and server-authorized**: choose a **Quick Room** (link + host approval) or **Locked Room** (link + six-digit PIN + approval). The guest's camera remains off before host approval. Supabase anonymous authentication is used behind the scenes, **not a Google sign-in requirement**. Two participants maximum, 45-minute room expiry, private Realtime signaling protected by server-enforced RLS. No gallery of public rooms and no automatic photo upload.
