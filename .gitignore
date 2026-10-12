@@ -9,3 +9,6 @@ Thumbs.db
 .vscode/
 
 .vercel
+
+# Supabase CLI project links and generated metadata are machine-local.
+supabase/.temp/

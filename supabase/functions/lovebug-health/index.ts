@@ -6,9 +6,13 @@
  * with a dedicated long random token, and only this server-side function may
  * upsert records into public.keep_alive_log.
  *
- * GET  /lovebug-health?source=cron&token=<separate-cron-token>
+ * GET  /lovebug-health?source=cron&token=<cron-token>  (read-only status)
+ * POST /lovebug-health?source=cron&token=<cron-token> (write heartbeat)
  * POST /lovebug-health?source=github-actions
- *      x-lovebug-health-token: <separate-github-token>
+ *      x-lovebug-health-token: <github-token> (write heartbeat)
+ *
+ * Either source may use GET or POST with its own credential. A GET request
+ * reads the latest database record and checks the website; it NEVER writes.
  *
  * JWT verification is disabled at the gateway for this webhook; this function
  * must reject every call without its own valid token (fail closed).
@@ -94,8 +98,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (source !== 'cron' && source !== 'github-actions') {
     return reply(400, { ok: false, error: 'invalid_source' });
   }
-  if ((source === 'cron' && request.method !== 'GET') ||
-      (source === 'github-actions' && request.method !== 'POST')) {
+  if (request.method !== 'GET' && request.method !== 'POST') {
     return reply(405, { ok: false, error: 'invalid_method' });
   }
 
@@ -127,6 +130,34 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const db = createClient(projectUrl, adminKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+    if (request.method === 'GET') {
+      // Health/status requests may be retried, previewed, or cached by tooling;
+      // they must not modify the database. A SELECT still checks DB activity.
+      const { data, error } = await db.from('keep_alive_log')
+        .select('source,heartbeat_day,pinged_at,website_ok,website_http_status,website_latency_ms')
+        .eq('source', source)
+        .order('pinged_at', { ascending: false })
+        .limit(1)
+        .abortSignal(AbortSignal.timeout(DATABASE_TIMEOUT_MS));
+      if (error) {
+        console.error('Lovebug health database read failed', { code: error.code });
+        return reply(503, { ok: false, error: 'database_read_failed' });
+      }
+      return reply(site.ok ? 200 : 503, {
+        ok: site.ok,
+        method: 'GET',
+        stored: false,
+        source,
+        checked_at: isoTime,
+        latest_heartbeat: data?.[0] ?? null,
+        website: {
+          reachable: site.ok,
+          http_status: site.httpStatus,
+          latency_ms: site.elapsedMs,
+        },
+      });
+    }
+
     const { error } = await db.from('keep_alive_log').upsert({
       source: source as Source,
       heartbeat_day: dayUtc,
@@ -144,11 +175,12 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return reply(503, { ok: false, error: 'database_unreachable' });
   }
 
-  // Return 503 when Vercel is unavailable so both schedulers alert, even though
-  // the failed site check was successfully written to the heartbeat table.
+  // POST writes one row per source/UTC day. A bad site response still gets
+  // stored for diagnostics but returns 503 so the scheduler can alert.
   return reply(site.ok ? 200 : 503, {
     ok: site.ok,
     stored: true,
+    method: 'POST',
     source,
     heartbeat_day: dayUtc,
     checked_at: isoTime,
