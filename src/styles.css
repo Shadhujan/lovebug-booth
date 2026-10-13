@@ -569,3 +569,44 @@
 .album-destination-simple{max-width:none;gap:4px}
 .album-destination-simple button{font-size:clamp(11px,1.2vw,13px);padding:11px 6px;white-space:normal}
 @media(max-width:360px){.album-destination-simple button{font-size:10px;line-height:1.45}}
+
+/* v0.6.3: one predictable photo viewer and two album destinations. */
+.album-destination-simple { max-width:610px; }
+.album-destination-simple button { min-height:48px; }
+.album-photo-open { width:100%; padding:0; border:0; cursor:zoom-in; }
+.album-photo-open:focus-visible { outline:3px solid #b95578; outline-offset:3px; }
+.lovebug-viewer-buttons { display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px; }
+.lovebug-viewer-buttons .soft-button { min-height:40px; }
+.cloud-v63-device-backups { margin-top:25px;padding:18px 22px; }
+.cloud-v63-device-backups summary,.cloud-v63-history summary,.cloud-v63-backup-choices summary { cursor:pointer;font-weight:900;color:#aa5e7d;line-height:1.7; }
+.cloud-v63-device-backups>details>p,.cloud-v63-history>p { font-size:12px;line-height:1.7;color:#a07785;margin:11px 0; }
+.cloud-v63-device-backups .cloud-album-grid { margin-top:15px; }
+.cloud-v63-disconnect { margin-top:14px;padding-top:9px;border-top:1px dashed #efd1dc; }
+.cloud-v63-disconnect .plain-button { font-size:11px; }
+.cloud-v63-disconnect-confirm { display:grid;align-items:start;gap:11px;margin-top:10px;padding:16px;background:#fff0f5;border:1px solid #eebecd;border-radius:15px; }
+.cloud-v63-disconnect-confirm strong { font-size:15px;color:#8f4c66; }
+.cloud-v63-disconnect-confirm p { font-size:12px;color:#a16e81;line-height:1.7;margin:0; }
+.cloud-v63-disconnect-confirm .soft-button { min-height:42px;white-space:normal;justify-self:stretch; }
+.cloud-v63-disconnect-confirm .plain-button { justify-self:start; }
+.cloud-v63-disconnect-without { background:#fffafa;border:1px solid #e9b8cb;border-radius:22px;color:#a04d6a;font-size:12px;font-weight:800;padding:13px; }
+.cloud-v63-connect-notice { border-radius:12px;background:#f4fbf2;padding:13px;color:#537a61; }
+.cloud-v63-backup-choices { background:#fff7fa;padding:12px 15px;border-radius:13px;border:1px dashed #ebc3d0;margin:18px 0; }
+.cloud-v63-backup-choice { flex:0 0 168px;min-height:56px;padding:10px;background:#fffdfd;border:1px solid #eed0d9;border-radius:13px;color:#a46a82;font-size:12px;font-weight:800; }
+.cloud-v63-backup-choice:hover { background:#ffe7f0; }
+.cloud-v63-history { border-top:1px dashed #efc7d3;margin-top:22px;padding:14px 0; }
+.cloud-v63-history label { display:block;font-size:11px;font-weight:800;color:#a66d82;margin:12px 0 5px; }
+.cloud-v63-history select { width:min(100%,420px);min-height:44px;background:#fffafb;border:1px solid #efd0da;border-radius:12px;padding:9px;color:#71485c;font-size:12px; }
+.cloud-v63-history-content { margin:13px 0;padding:15px;background:#fff8fa;border-radius:16px; }
+.cloud-v63-history-content p { font-size:12px;color:#ad758b;line-height:1.6; }
+.cloud-v63-history-actions { display:flex;flex-wrap:wrap;gap:9px;margin:10px 0 17px; }
+.cloud-v63-history-actions button { min-height:42px; }
+.cloud-v63-disconnect-confirm button:focus-visible,.cloud-v63-history button:focus-visible,
+.cloud-v63-device-backups button:focus-visible,.cloud-v63-history select:focus-visible { outline:3px solid #a84e72;outline-offset:3px; }
+@media(max-width:520px) {
+  .cloud-v63-device-backups { padding:14px; }
+  .cloud-v63-disconnect-confirm { padding:12px; }
+  .cloud-v63-history-actions { flex-direction:column; }
+  .cloud-v63-history-actions button { width:100%; }
+  .lovebug-viewer-buttons { width:100%; }
+  .album-destination-simple { width:100%; }
+}

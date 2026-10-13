@@ -40,10 +40,13 @@ Deno.serve(async (request) => {
   const userId = userData.user.id;
 
   const { data: album, error: albumError } = await admin.from('lovebug_v6_couples')
-    .select('id,owner_id,deleting_at').eq('id', albumId).maybeSingle();
+    .select('id,owner_id,deleting_at,archived_at').eq('id', albumId).maybeSingle();
   if (albumError) return json({ error: 'Album could not be checked' }, 503);
   if (!album) return json({ error: 'Album not found' }, 404);
   if (album.owner_id !== userId) return json({ error: 'Only the creator can delete the shared album' }, 403);
+  // Disconnect must not allow the former creator to erase the other person's
+  // recoverable memories, even by manually invoking this older endpoint.
+  if (album.archived_at) return json({ error: 'Old shared memories are preserved for both people. Permanent deletion requires a separate consent flow.' }, 409);
 
   // Protect the free-tier function from unbounded work. Larger galleries can be
   // exported/deleted in smaller batches by a future dedicated cleanup job.

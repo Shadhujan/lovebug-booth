@@ -171,3 +171,11 @@ Historical v0.4 code: a single-couple opt-in shared album was prototyped with Su
 ### v0.6.2: Simple albums and room recovery
 
 See [Room recovery and simple albums](docs/CLOUD_ALBUM_V062_AND_ROOM_RECOVERY.md) for the non-destructive SQL migration, protected whole-album deletion endpoint, and mandatory two-device regression checklist.
+
+### v0.6.3: Two albums, safe disconnect
+
+The album UI now has only **On this device** and **Our shared album**. Local photos can optionally be backed up to a Google account; those backups are accessible from a collapsed section on the device page, not a third album. Both views use the same photo-preview interaction.
+
+Each account has at most one active shared connection. Either member can end that connection; previously shared photos remain **read-only and recoverable** by both people under Past shared memories. A new connection starts with an empty shared album. Keeping copies in your own cloud is optional and explicit; no photo data is transferred automatically by signing in or disconnecting.
+
+Before enabling cloud for production, follow [Two albums and safe disconnect](docs/TWO_ALBUMS_V063.md), including the new SQL migration and redeploying the existing album-deletion Edge Function. **Quick/Locked Rooms and Live Together's local-offline fallback are unchanged.**

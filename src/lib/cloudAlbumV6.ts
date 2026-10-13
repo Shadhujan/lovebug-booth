@@ -12,6 +12,7 @@ export type CloudCouple = {
   title: string;
   created_at: string;
   deleting_at: string | null;
+  archived_at: string | null;
 };
 export type CloudPhoto = {
   id: string;
@@ -22,6 +23,7 @@ export type CloudPhoto = {
   theme: ThemeKey;
   note: string;
   object_path: string;
+  source_local_id: string | null;
 };
 
 function api() {
@@ -41,10 +43,83 @@ export function makeCoupleInvitation(): string {
 
 export async function listCouples(): Promise<CloudCouple[]> {
   const { data, error } = await api().from('lovebug_v6_couples')
-    .select('id,owner_id,title,created_at,deleting_at')
+    .select('id,owner_id,title,created_at,deleting_at,archived_at')
     .order('created_at', { ascending: false }).limit(20);
   if (error) throw new Error(`Could not load shared albums: ${error.message}`);
   return (data ?? []) as CloudCouple[];
+}
+
+
+/** v0.6.3: server-authorized active connection, not inferred from older albums. */
+export async function currentCoupleId(): Promise<string | null> {
+  const { data, error } = await api().rpc('lovebug_v6_my_active_couple');
+  if (error) throw new Error(`Could not check your connection: ${error.message}`);
+  return typeof data === 'string' ? data : null;
+}
+
+/** Disconnect both people from the current album, without deleting shared photos.
+ * The album remains readable under Past memories for independent recovery. */
+export async function disconnectCouple(coupleId: string): Promise<void> {
+  if (!isUuid(coupleId)) throw new Error('Invalid connection.');
+  const { error } = await api().rpc('lovebug_v6_disconnect', { p_couple: coupleId });
+  if (error) throw new Error(`Could not disconnect: ${error.message}`);
+}
+
+/** Query all records rather than the first 24, especially when preserving an archive. */
+export async function listAllCloudPhotos(scope: 'personal' | 'shared', coupleId: string | null): Promise<CloudPhoto[]> {
+  if (scope === 'shared' && !coupleId) return [];
+  const photos: CloudPhoto[] = [];
+  for (let offset = 0; offset <= 400; offset += 100) {
+    let query = api().from('lovebug_v6_photos')
+      .select('id,owner_id,scope,couple_id,created_at,theme,note,object_path,source_local_id')
+      .eq('scope', scope)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + 99);
+    if (scope === 'shared') query = query.eq('couple_id', coupleId!);
+    const { data, error } = await query;
+    if (error) throw new Error(`Could not load photos: ${error.message}`);
+    const batch = (data ?? []) as CloudPhoto[];
+    photos.push(...batch);
+    if (batch.length < 100) return photos;
+  }
+  // Limit work explicitly: no silent partial archive/downloads.
+  throw new Error('This album has more than 500 photos. Download your memories in smaller batches.');
+}
+
+/** Back up a shared photo into the user's own private cloud collection. */
+export async function preserveSharedPhoto(photo: CloudPhoto, image: Blob, user: User): Promise<'copied' | 'already-saved'> {
+  if (user.is_anonymous || photo.scope !== 'shared' || !isUuid(photo.id)) throw new Error('A Google account and a shared photo are required.');
+  if (!image.size || image.size > MAX_BYTES) throw new Error('Photo exceeds the 10 MB storage limit.');
+  const { data: existing, error: existingError } = await api().from('lovebug_v6_photos')
+    .select('id').eq('scope', 'personal').eq('owner_id', user.id).eq('source_local_id', photo.id).limit(1);
+  if (existingError) throw new Error(`Could not check this backup: ${existingError.message}`);
+  if (existing?.length) return 'already-saved';
+  const id = crypto.randomUUID();
+  const objectPath = `personal/${user.id}/${id}.png`;
+  const bucket = api().storage.from(BUCKET);
+  const { error: uploadError } = await bucket.upload(objectPath, image, { contentType: 'image/png', upsert: false });
+  if (uploadError) throw new Error(`Could not back up a shared photo: ${uploadError.message}`);
+  const { error: insertError } = await api().from('lovebug_v6_photos').insert({
+    id, owner_id: user.id, scope: 'personal', couple_id: null, theme: photo.theme,
+    note: photo.note, object_path: objectPath, source_local_id: photo.id,
+  });
+  if (insertError) {
+    await bucket.remove([objectPath]);
+    if (insertError.code === '23505') return 'already-saved';
+    throw new Error(`Could not record the private backup: ${insertError.message}`);
+  }
+  return 'copied';
+}
+
+/** Protect each memory before leaving. A failure stops the disconnect workflow. */
+export async function preserveAlbumToCloud(coupleId: string, user: User, onProgress?: (done: number, total: number) => void): Promise<number> {
+  const photos = await listAllCloudPhotos('shared', coupleId);
+  for (let i = 0; i < photos.length; i++) {
+    const image = await downloadCloudPhoto(photos[i]);
+    await preserveSharedPhoto(photos[i], image, user);
+    onProgress?.(i + 1, photos.length);
+  }
+  return photos.length;
 }
 
 export async function createCouple(title: string, code: string): Promise<string> {
@@ -75,7 +150,7 @@ export async function rotateCoupleInvite(coupleId: string, code: string): Promis
 export async function listCloudPhotos(scope: 'personal' | 'shared', coupleId: string | null): Promise<CloudPhoto[]> {
   if (scope === 'shared' && !coupleId) return [];
   let query = api().from('lovebug_v6_photos')
-    .select('id,owner_id,scope,couple_id,created_at,theme,note,object_path')
+    .select('id,owner_id,scope,couple_id,created_at,theme,note,object_path,source_local_id')
     .eq('scope', scope)
     .order('created_at', { ascending: false })
     .limit(24);
