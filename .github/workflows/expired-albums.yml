@@ -1,0 +1,29 @@
+name: Lovebug Booth - Expired Album Cleanup
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lovebug-expired-albums
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Delete only expired shared albums and finish mutual approvals
+        env:
+          CLEANUP_TOKEN: ${{ secrets.LOVEBUG_CLEANUP_GITHUB_TOKEN }}
+          CLEANUP_URL: https://cwmsqihdtxsfgmslavpk.supabase.co/functions/v1/lovebug-memory-cleanup
+        run: |
+          set -euo pipefail
+          if [ -z "$CLEANUP_TOKEN" ]; then echo 'Missing new cleanup secret LOVEBUG_CLEANUP_GITHUB_TOKEN' >&2; exit 1; fi
+          curl --silent --show-error --fail-with-body --retry 2 --retry-delay 5 --max-time 90 \
+            --request POST --header "x-lovebug-cleanup-token: ${CLEANUP_TOKEN}" "$CLEANUP_URL"
+          echo ''

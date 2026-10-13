@@ -4,7 +4,8 @@ import CloudPhotoTile from './CloudPhotoTile';
 import MemoryPhotoViewer from './MemoryPhotoViewer';
 import { deleteOwnCloudPhoto, downloadCloudPhoto, listAllCloudPhotos, uploadLocalPhoto, type CloudPhoto } from '../lib/cloudAlbumV6';
 import { supabaseClient } from '../lib/supabaseClient';
-import CloudAlbumV6 from './CloudAlbumV6';
+import CloudAlbumV64 from './CloudAlbumV64';
+import './AlbumV64.css';
 import { makeLocalBackup } from '../lib/localBackup';
 import { clearLocalMemories, deleteStrip, downloadBlob, listCustomStickers, listStrips, saveStrip } from '../lib/storage';
 import type { AlbumEntry } from '../types';
@@ -35,6 +36,8 @@ export default function Album({ onHome, onNew }: Props) {
   const [cloudMessage, setCloudMessage] = useState('');
   const [cloudError, setCloudError] = useState('');
   const [openLocal, setOpenLocal] = useState<Card | null>(null);
+  const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
+  const [cloudOpen, setCloudOpen] = useState(false);
   const restoredUrls = useRef(new Set<string>());
   const [stickerCount, setStickerCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -172,66 +175,59 @@ export default function Album({ onHome, onNew }: Props) {
       <button className="pink-button" onClick={onNew}>make new memories <span className="button-icon">↗</span></button>
     </div>
 
-    <section className="album-privacy-card paper-card" aria-label="Your photo privacy">
-      <span aria-hidden="true" className="album-privacy-heart">&#9825;</span>
-      <div><strong>Your memories belong to you.</strong>
-        <p>Photos kept on this device stay in this browser and never upload automatically. Online saving is optional and requires your explicit choice. Clearing browser data, switching browsers, or losing the device can erase local photos, so download your favorites.</p>
-      </div>
-    </section>
+    <p className="lovebug-v64-private-note">Your device photos stay yours, unless you choose to share them. &#9825;</p>
 
     {CLOUD_ENABLED && <div className="album-destination-switch album-destination-simple" role="group" aria-label="Choose your memories">
       <button type="button" aria-pressed={destination === 'device'} className={destination === 'device' ? 'selected' : ''} onClick={() => switchAlbum('device')}>♡ on this device</button>
       <button type="button" aria-pressed={destination === 'shared'} className={destination === 'shared' ? 'selected' : ''} onClick={() => switchAlbum('shared')}>♡ our shared album</button>
     </div>}
 
-    {destination === 'shared' ? <CloudAlbumV6 localCards={cards} user={cloudUser} authLoading={authLoading} onLogin={() => signIn('shared')} onSignOut={signOut} /> : <>
-    <section className="album-backup-card paper-card" aria-label="Manage local memories">
-      <div className="album-backup-intro">
-        <div><div className="eyebrow">A LITTLE BACKUP, JUST IN CASE</div><h2>Keep the good ones safe.</h2><p>Download your saved photo strips and custom stickers together as a ZIP. The backup stays with you; it isn't sent to us.</p></div>
-        <div className="album-backup-actions">
-          <button className="soft-button" type="button" onClick={() => void backup()} disabled={loading || busy !== null || empty}>{busy === 'backup' ? 'packing your memories...' : '↓ download all memories'}</button>
-          <button className="plain-button album-clear-button" type="button" onClick={() => { setConfirmClear(true); setMessage(''); setError(null); }} disabled={loading || busy !== null || empty}>clear saved memories</button>
-        </div>
+    {destination === 'shared' ? <CloudAlbumV64 localCards={cards} user={cloudUser} authLoading={authLoading} onLogin={() => signIn('shared')} onSignOut={signOut} /> : <>
+    <div className="lovebug-v64-device-bar">
+      <h2>On this device &#9825;</h2>
+      <div className="lovebug-v64-iconbar">
+        {CLOUD_ENABLED && <button type="button" aria-label="My private cloud backups" aria-expanded={cloudOpen}
+          onClick={() => {setCloudOpen(v=>!v);setDeviceMenuOpen(false);}}>&#9729;</button>}
+        <button type="button" aria-label="Device memory options" aria-expanded={deviceMenuOpen}
+          onClick={() => {setDeviceMenuOpen(v=>!v);setCloudOpen(false);}}>&#8943;</button>
       </div>
-      {confirmClear && <div className="album-clear-confirm" role="group" aria-label="Confirm permanent deletion">
-        <strong>Delete everything saved in this browser?</strong>
-        <p>This removes {cards.length} photo {cards.length === 1 ? 'strip' : 'strips'} and {stickerCount} handmade {stickerCount === 1 ? 'sticker' : 'stickers'}. This cannot be undone. Download a backup first if you want to keep them.</p>
-        <div className="album-confirm-buttons"><button className="soft-button" onClick={() => setConfirmClear(false)} disabled={busy !== null}>keep my memories</button><button className="album-confirm-delete" onClick={() => void clear()} disabled={busy !== null}>{busy === 'clear' ? 'clearing...' : 'yes, delete local memories'}</button></div>
-      </div>}
-      {message && <p className="album-success" role="status">{message}</p>}
-      {error && <p className="error-note" role="alert">{error}</p>}
-    </section>
+    </div>
+    {deviceMenuOpen && <div className="lovebug-v64-popover lovebug-v64-menu" role="group" aria-label="Device memory options">
+      <button type="button" onClick={() => {setDeviceMenuOpen(false);void backup();}} disabled={loading || busy !== null || empty}>Download all memories</button>
+      <button type="button" onClick={() => {setDeviceMenuOpen(false);setConfirmClear(true);setMessage('');setError(null);}} disabled={loading || busy !== null || empty}>Clear saved memories</button>
+    </div>}
+    {confirmClear && <div className="album-clear-confirm" role="group" aria-label="Confirm permanent deletion">
+      <strong>Clear memories saved on this device?</strong>
+      <p>This removes {cards.length} photo strips and {stickerCount} handmade stickers, only from this browser. Download a ZIP first if you want to keep them.</p>
+      <div className="album-confirm-buttons"><button className="soft-button" onClick={() => setConfirmClear(false)} disabled={busy !== null}>keep my memories</button><button className="album-confirm-delete" onClick={() => void clear()} disabled={busy !== null}>{busy === 'clear' ? 'clearing...' : 'yes, clear device memories'}</button></div>
+    </div>}
+    {message && <p className="album-success" role="status">{message}</p>}
+    {error && <p className="error-note" role="alert">{error}</p>}
 
     {loading ? <p className="empty-album">Opening our scrapbook...</p> : cards.length ? <div className="album-grid">{cards.map(({ entry, url }) => <article className="album-card paper-card" key={entry.id}>
       <button type="button" className="album-photo album-photo-open" onClick={() => setOpenLocal({ entry, url })} aria-label="View photo full size"><img src={url} alt={`Photo strip saved on ${new Date(entry.createdAt).toLocaleDateString()}`} /></button>
-      <div className="album-card-label"><strong>our little moment &#9825;</strong><small>{new Date(entry.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</small></div>
-      <div className="album-card-actions">
-        <button type="button" onClick={() => setOpenLocal({ entry, url })}>view</button>
-        <button type="button" onClick={() => downloadBlob(entry.image, `lovebug-${entry.id.slice(0, 8)}.png`)}>↓ download</button>
-        {CLOUD_ENABLED && <button type="button" disabled={!!cloudBusy || cloudBackups.some(b => b.source_local_id === entry.id)}
-          onClick={() => backUpOne(entry)}>{cloudBackups.some(b => b.source_local_id === entry.id) ? '♡ backed up' : '☁ back up'}</button>}
-        <button type="button" onClick={() => void remove({ entry, url })}>remove</button>
-      </div>
+      <div className="album-card-label lovebug-v64-date"><small>{new Date(entry.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</small></div>
     </article>)}</div> : <div className="empty-album paper-card"><img src="/stickers/envelope.svg" alt=""/><h2>Our album is waiting for us.</h2><p>No saved photos here just yet. That means it's time to make some!</p><button className="pink-button" onClick={onNew}>take our first strip <span className="button-icon">&#9829;</span></button></div>}
     {cloudMessage && <p className="cloud-good-news" role="status">{cloudMessage}</p>}
     {cloudError && <p className="error-note" role="alert">{cloudError}</p>}
-    {CLOUD_ENABLED && <section className="cloud-v63-device-backups paper-card" aria-label="Optional cloud backups">
-      <details>
-        <summary>☁ My cloud backups (optional){cloudUser && !cloudUser.is_anonymous ? ` · ${cloudBackups.length} photos` : ''}</summary>
-        <p>Back up a device photo only when you choose. Your private backups are never shared automatically.</p>
-        {authLoading ? <p role="status">Checking Google sign-in…</p>
-          : !cloudUser || cloudUser.is_anonymous ? <button className="soft-button" type="button" onClick={() => signIn('device')}>continue with Google to back up ♡</button>
-          : <>
-            <p>Signed in as {cloudUser.email} <button type="button" className="plain-button" onClick={signOut}>sign out</button></p>
-            {cloudBackups.length ? <div className="cloud-album-grid">{cloudBackups.map(photo => <CloudPhotoTile key={photo.id} photo={photo}
-              onDelete={deleteCloud} onRestore={restoreOne} busy={!!cloudBusy} />)}</div>
-              : <p className="cloud-v6-empty">No online backups yet. Choose “back up” on any photo above.</p>}
-          </>}
-      </details>
+    {CLOUD_ENABLED && cloudOpen && <section className="cloud-v63-device-backups paper-card lovebug-v64-backups" aria-label="Optional cloud backups">
+      <h3>My cloud backups &#9825;</h3>
+      {authLoading ? <p role="status">Checking Google sign-in...</p>
+        : !cloudUser || cloudUser.is_anonymous ? <button className="soft-button" type="button" onClick={() => signIn('device')}>Continue with Google</button>
+        : <>
+          <p className="lovebug-v64-account">{cloudUser.email} <button type="button" className="plain-button" onClick={signOut}>Sign out</button></p>
+          {cloudBackups.length ? <div className="cloud-album-grid">{cloudBackups.map(photo => <CloudPhotoTile key={photo.id} photo={photo}
+            onDelete={deleteCloud} onRestore={restoreOne} busy={!!cloudBusy} deleteLabel="Delete backup" />)}</div>
+            : <p className="cloud-v6-empty">No cloud backups yet. You can save any photo from its viewer.</p>}
+        </>}
     </section>}
     {openLocal && <MemoryPhotoViewer src={openLocal.url} description="Full-size photo saved on this device"
       onClose={() => setOpenLocal(null)}
-      onDownload={() => downloadBlob(openLocal.entry.image, `lovebug-${openLocal.entry.id.slice(0, 8)}.png`)} />}
+      onDownload={() => downloadBlob(openLocal.entry.image, `lovebug-${openLocal.entry.id.slice(0, 8)}.png`)}
+      onDelete={() => void remove(openLocal!)}
+      busy={!!cloudBusy}
+      extraActions={CLOUD_ENABLED ? [{ label: cloudBackups.some(b=>b.source_local_id===openLocal.entry.id)?'Backed up':'Save to cloud',
+        onClick:()=>backUpOne(openLocal!.entry), disabled: cloudBackups.some(b=>b.source_local_id===openLocal.entry.id) }] : []} />}
     </>}
   </main>;
 }

@@ -6,10 +6,13 @@ type Props = {
   onClose: () => void;
   onDownload: () => void;
   onDelete?: () => void;
+  deleteLabel?: string;
+  extraActions?: { label: string; onClick: () => void; disabled?: boolean }[];
+  busy?: boolean;
 };
 
-/** The same full-size viewer for on-device, private-backup, and shared photos. */
-export default function MemoryPhotoViewer({ src, description, onClose, onDownload, onDelete }: Props) {
+/** One gentle, keyboard-accessible viewer for local, cloud and shared photos. */
+export default function MemoryPhotoViewer({ src, description, onClose, onDownload, onDelete, deleteLabel, extraActions = [], busy }: Props) {
   const closeButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -24,13 +27,14 @@ export default function MemoryPhotoViewer({ src, description, onClose, onDownloa
   return <div className="cloud-v6-lightbox" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="cloud-v6-lightbox-content" role="dialog" aria-modal="true" aria-label={description}>
       <div className="cloud-v6-lightbox-actions">
-        <span>Our little moment ♡</span>
-        <button ref={closeButton} type="button" onClick={onClose} aria-label="Close photo preview">✕ close</button>
+        <span>Our little moment &#9825;</span>
+        <button ref={closeButton} type="button" onClick={onClose} aria-label="Close photo preview">Close</button>
       </div>
       <img src={src} alt={description} />
       <div className="lovebug-viewer-buttons">
-        <button type="button" className="soft-button" onClick={onDownload}>↓ download photo</button>
-        {onDelete && <button type="button" className="plain-button" onClick={onDelete}>remove photo</button>}
+        <button type="button" className="soft-button" disabled={busy} onClick={onDownload}>Download photo</button>
+        {extraActions.map(action => <button type="button" key={action.label} className="soft-button" disabled={busy || action.disabled} onClick={action.onClick}>{action.label}</button>)}
+        {onDelete && <button type="button" className="plain-button" disabled={busy} onClick={onDelete}>{deleteLabel ?? 'Remove photo'}</button>}
       </div>
     </section>
   </div>;

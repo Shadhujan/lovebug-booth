@@ -1,0 +1,67 @@
+/* v0.6.4: a calmer scrapbook, scoped to the album only. */
+.album-page .lovebug-v64-private-note { margin:0 0 12px;color:#a67a8a;font-size:12px;line-height:1.6 }
+.album-page .lovebug-v64-device-bar,.lovebug-v64-shared .lovebug-v64-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:13px 0 18px;
+}
+.album-page .lovebug-v64-device-bar h2,.lovebug-v64-shared .lovebug-v64-heading h2 {
+  margin:0;color:#985c75;font:italic 400 clamp(19px,3.5vw,26px) Georgia,serif;
+}
+.album-page .lovebug-v64-iconbar,.lovebug-v64-shared .lovebug-v64-iconbar {display:flex;align-items:center;gap:7px}
+.album-page .lovebug-v64-iconbar button,.lovebug-v64-shared .lovebug-v64-iconbar button {
+  display:grid;place-items:center;width:43px;height:43px;border:1px solid #f0c9d7;
+  border-radius:14px;background:#fff8fa;color:#a75878;font-size:23px;cursor:pointer;
+  transition:background .2s,transform .2s;
+}
+.album-page .lovebug-v64-iconbar button:hover,.lovebug-v64-shared .lovebug-v64-iconbar button:hover {background:#fde6ee;transform:translateY(-1px)}
+.album-page .lovebug-v64-iconbar button[aria-expanded=true],.lovebug-v64-shared .lovebug-v64-iconbar button[aria-expanded=true] {background:#fce0ea}
+.lovebug-v64-popover {width:min(100%,370px);margin:0 0 18px auto;padding:13px 16px;background:#fff8fa;border:1px solid #f1cada;border-radius:15px;color:#8d5e73;box-shadow:0 10px 25px #dc96ad20}
+.lovebug-v64-popover strong {font-size:13px;color:#925270}
+.lovebug-v64-popover p {margin:9px 0 0;font-size:12px;overflow-wrap:anywhere}
+.lovebug-v64-menu {display:grid;gap:3px;padding:7px}
+.lovebug-v64-menu button {display:block;text-align:left;width:100%;min-height:43px;padding:10px 13px;border:0;border-radius:10px;background:transparent;color:#9f5e78;font-weight:700;font-size:12px;cursor:pointer}
+.lovebug-v64-menu button:hover {background:#fce5ed}
+.lovebug-v64-menu button:disabled {opacity:.55;cursor:default}
+.album-page .lovebug-v64-date {display:flex;justify-content:center;padding:9px 4px 2px;min-height:0}
+.album-page .lovebug-v64-date small,.lovebug-v64-photo>small {display:block;text-align:center;color:#ac8a98;font-size:11px;font-weight:500}
+.album-page .album-grid .album-card {min-width:0}
+.album-page .album-grid .album-card .album-photo {cursor:zoom-in}
+.album-page .lovebug-v64-backups {margin:22px 0 0}
+.album-page .lovebug-v64-backups h3 {font:italic 400 21px Georgia,serif;color:#985c75;margin:0 0 12px}
+.album-page .lovebug-v64-account {font-size:11px;color:#a17b88;overflow-wrap:anywhere}
+.lovebug-v64-photo .cloud-v6-open-hint,.lovebug-v64-photo .cloud-photo-actions {display:none}
+.lovebug-v64-photo>small {margin-top:9px}
+.lovebug-v64-shared .lovebug-v64-connect {display:grid;justify-items:start;gap:12px;padding:16px 3px 24px}
+.lovebug-v64-shared .lovebug-v64-connect h2,.lovebug-v64-shared .lovebug-v64-goodbye h3 {font:italic 400 24px Georgia,serif;margin:0;color:#96546f}
+.lovebug-v64-shared .lovebug-v64-connect p,.lovebug-v64-shared .lovebug-v64-goodbye p {margin:0;color:#a47888;font-size:12px;line-height:1.65}
+.lovebug-v64-shared .lovebug-v64-signout {margin-top:15px;font-size:11px}
+.lovebug-v64-shared .cloud-v6-connect-options {max-width:480px}
+.lovebug-v64-shared .lovebug-v64-goodbye {display:grid;justify-items:start;gap:13px;padding:20px;background:#fff4f7;border:1px dashed #f0c2d2;border-radius:16px;margin-bottom:17px}
+.lovebug-v64-shared .lovebug-v64-waiting {padding:12px 3px}
+.lovebug-v64-shared .lovebug-v64-waiting>p {font-size:13px;color:#9d7082}
+.lovebug-v64-shared .lovebug-v64-add {min-height:43px;margin:2px 0 15px}
+.lovebug-v64-shared .lovebug-v64-picker,.lovebug-v64-shared .lovebug-v64-dialog,.lovebug-v64-shared .lovebug-v64-approval {
+  display:grid;gap:12px;margin:12px 0 18px;padding:16px;border:1px solid #f0cada;border-radius:16px;background:#fff7fa;
+}
+.lovebug-v64-shared .lovebug-v64-picker p,.lovebug-v64-shared .lovebug-v64-dialog p,.lovebug-v64-shared .lovebug-v64-approval p {margin:0;color:#9e7183;font-size:12px;line-height:1.65}
+.lovebug-v64-shared .lovebug-v64-dialog h3,.lovebug-v64-shared .lovebug-v64-approval h3 {font:italic 400 21px Georgia,serif;color:#955773;margin:0}
+.lovebug-v64-shared .lovebug-v64-dialog button {justify-self:start;min-height:42px}
+.lovebug-v64-shared .lovebug-v64-warning {border:1px solid #efc2d3;border-radius:99px;padding:9px 17px;background:#fffafc;color:#9f5274;font-size:12px;font-weight:800}
+.lovebug-v64-shared .lovebug-v64-pickgrid {display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:9px}
+.lovebug-v64-shared .lovebug-v64-pickgrid button {padding:4px;border:1px solid #f1d2dd;border-radius:12px;background:#fff;cursor:pointer;min-width:0}
+.lovebug-v64-shared .lovebug-v64-pickgrid img {display:block;width:100%;aspect-ratio:3/4;object-fit:contain}
+.lovebug-v64-shared .lovebug-v64-confirm-share {display:flex;flex-wrap:wrap;align-items:center;gap:9px;padding:10px;border-radius:12px;background:#fceaf0}
+.lovebug-v64-shared .lovebug-v64-confirm-share p {flex:1 1 100%}
+.lovebug-v64-shared .lovebug-v64-approval {max-width:460px;justify-items:start}
+.lovebug-v64-shared .lovebug-v64-approval-photo {max-width:146px;min-width:110px}
+.lovebug-v64-shared .lovebug-v64-approval-actions {display:flex;gap:8px;flex-wrap:wrap}
+.lovebug-v64-shared .lovebug-v64-approval-actions button {min-height:42px}
+.lovebug-v64-shared .lovebug-v64-gallery {margin:6px 0 20px}
+.album-page .lovebug-v64-iconbar button:focus-visible,.lovebug-v64-shared button:focus-visible,
+.album-page .lovebug-v64-menu button:focus-visible {outline:3px solid #b7557a;outline-offset:2px}
+@media(max-width:480px) {
+  .album-page .lovebug-v64-device-bar,.lovebug-v64-shared .lovebug-v64-heading {margin:9px 0 14px}
+  .lovebug-v64-shared .lovebug-v64-picker,.lovebug-v64-shared .lovebug-v64-dialog,.lovebug-v64-shared .lovebug-v64-approval {padding:12px}
+  .album-page .lovebug-v64-iconbar button,.lovebug-v64-shared .lovebug-v64-iconbar button {width:42px;height:42px}
+  .lovebug-v64-shared .lovebug-v64-pickgrid {grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion:reduce){.album-page .lovebug-v64-iconbar button,.lovebug-v64-shared .lovebug-v64-iconbar button {transition:none}}
